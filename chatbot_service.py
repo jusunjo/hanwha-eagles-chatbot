@@ -34,13 +34,11 @@ class HanwhaEaglesChatbot:
             async def process_chatbot_background():
                 try:
                     print(f"[CALLBACK] 백그라운드 처리 시작 - 콜백 URL: {callback_url}")
-                    print(f"[CALLBACK] 백그라운드에서 질문 처리 중: {user_message}")
                     
                     # 기존 동기 메서드를 비동기로 실행
                     response_text = await self._process_message_async(user_message)
                     
-                    print(f"[CALLBACK] 백그라운드 처리 완료 - 응답 생성됨")
-                    print(f"[CALLBACK] 응답 길이: {len(response_text) if response_text else 0}")
+                    print(f"[CALLBACK] 백그라운드 처리 완료")
                     
                     # 콜백으로 최종 결과 전송
                     if callback_url:
@@ -59,7 +57,6 @@ class HanwhaEaglesChatbot:
                         }
                         
                         print(f"[CALLBACK] 콜백 전송 시작: {callback_url}")
-                        print(f"[CALLBACK] 전송할 데이터: {json.dumps(final_callback_response, ensure_ascii=False)}")
                         
                         async with httpx.AsyncClient(timeout=60.0) as client:
                             response = await client.post(
@@ -68,11 +65,9 @@ class HanwhaEaglesChatbot:
                                 headers={"Content-Type": "application/json"}
                             )
                             print(f"[CALLBACK] 콜백 전송 완료 - 상태코드: {response.status_code}")
-                            print(f"[CALLBACK] 콜백 응답 내용: {response.text}")
                             
                 except Exception as e:
                     print(f"[CALLBACK ERROR] 백그라운드 처리 중 오류: {str(e)}")
-                    print(f"[CALLBACK ERROR] 오류 타입: {type(e).__name__}")
                     
                     # 에러 발생 시에도 콜백으로 에러 메시지 전송
                     if callback_url:
@@ -101,7 +96,6 @@ class HanwhaEaglesChatbot:
                                 print(f"[CALLBACK] 에러 콜백 전송 완료")
                         except Exception as callback_error:
                             print(f"[CALLBACK ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
-                            print(f"[CALLBACK ERROR] 콜백 에러 타입: {type(callback_error).__name__}")
             
             # 콜백 URL이 있는 경우 백그라운드 처리
             if callback_url:
@@ -120,7 +114,7 @@ class HanwhaEaglesChatbot:
                     )
                     
                     # 3초 이내에 결과가 나온 경우
-                    print("[CALLBACK] 3초 이내에 결과 완료 - 백그라운드 태스크 취소")
+                    print("[CALLBACK] 3초 이내에 결과 완료")
                     background_task.cancel()  # 백그라운드 태스크 취소
                     
                     # 즉시 응답
@@ -144,13 +138,6 @@ class HanwhaEaglesChatbot:
                 except asyncio.TimeoutError:
                     # 3초가 지나서 타임아웃된 경우
                     print("[CALLBACK] 3초 타임아웃 - 백그라운드 처리로 전환")
-                    print(f"[CALLBACK] 백그라운드 태스크가 실행 중입니다: {background_task}")
-                    
-                    # 백그라운드 태스크가 실행 중인지 확인
-                    if not background_task.done():
-                        print("[CALLBACK] 백그라운드 태스크가 정상적으로 실행 중입니다.")
-                    else:
-                        print("[CALLBACK] 경고: 백그라운드 태스크가 이미 완료되었습니다.")
                     
                     # 즉시 "기다리는 메시지" 응답
                     waiting_response = {
@@ -167,7 +154,7 @@ class HanwhaEaglesChatbot:
                         }
                     }
                     
-                    print(f"[CALLBACK] 대기 메시지 응답 반환 - 백그라운드에서 처리 중...")
+                    print(f"[CALLBACK] 대기 메시지 응답 반환")
                     return waiting_response
             
             else:
