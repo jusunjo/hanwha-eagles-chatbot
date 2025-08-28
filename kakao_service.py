@@ -172,6 +172,15 @@ class KakaoService:
                     }
                 }
                 
+                # 응답 검증 및 로깅
+                print(f"[KAKAO] 즉시 응답 검증:")
+                print(f"[KAKAO] - version: {immediate_response.get('version')}")
+                print(f"[KAKAO] - template 존재: {'template' in immediate_response}")
+                print(f"[KAKAO] - outputs 존재: {'outputs' in immediate_response.get('template', {})}")
+                print(f"[KAKAO] - outputs 길이: {len(immediate_response.get('template', {}).get('outputs', []))}")
+                print(f"[KAKAO] - simpleText 존재: {'simpleText' in immediate_response.get('template', {}).get('outputs', [{}])[0]}")
+                print(f"[KAKAO] - text 길이: {len(immediate_response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text', ''))}")
+                
                 print(f"[KAKAO] 즉시 응답 생성 완료")
                 print(f"[KAKAO] ===== 카카오톡 챗봇 요청 완료 (즉시 응답) =====")
                 return immediate_response
@@ -268,7 +277,7 @@ class KakaoService:
                 print(f"[KAKAO-IMMEDIATE] 챗봇 처리 실패 - 빈 응답")
                 response_text = "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
             
-            # 즉시 응답
+            # 카카오톡 챗봇 정확한 스키마에 맞춘 응답
             immediate_response = {
                 "version": "2.0",
                 "template": {
@@ -282,13 +291,24 @@ class KakaoService:
                 }
             }
             
+            # 응답 검증 및 로깅
+            print(f"[KAKAO-IMMEDIATE] 응답 검증:")
+            print(f"[KAKAO-IMMEDIATE] - version: {immediate_response.get('version')}")
+            print(f"[KAKAO-IMMEDIATE] - template 존재: {'template' in immediate_response}")
+            print(f"[KAKAO-IMMEDIATE] - outputs 존재: {'outputs' in immediate_response.get('template', {})}")
+            print(f"[KAKAO-IMMEDIATE] - outputs 길이: {len(immediate_response.get('template', {}).get('outputs', []))}")
+            print(f"[KAKAO-IMMEDIATE] - simpleText 존재: {'simpleText' in immediate_response.get('template', {}).get('outputs', [{}])[0]}")
+            print(f"[KAKAO-IMMEDIATE] - text 길이: {len(immediate_response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text', ''))}")
+            
             print(f"[KAKAO-IMMEDIATE] 즉시 응답 생성 완료")
             return immediate_response
             
         except Exception as e:
             print(f"[KAKAO-IMMEDIATE-ERROR] 즉시 응답 처리 오류: {str(e)}")
             print(f"[KAKAO-IMMEDIATE-ERROR] 오류 타입: {type(e).__name__}")
-            return {
+            
+            # 에러 시에도 정확한 스키마로 응답
+            error_response = {
                 "version": "2.0",
                 "template": {
                     "outputs": [
@@ -300,6 +320,7 @@ class KakaoService:
                     ]
                 }
             }
+            return error_response
 
 
 # Create a singleton instance
