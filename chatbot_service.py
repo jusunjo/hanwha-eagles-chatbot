@@ -93,16 +93,16 @@ class HanwhaEaglesChatbot:
                 # 백그라운드에서 챗봇 작업 시작
                 background_task = asyncio.create_task(process_chatbot_background())
                 
-                # 4초 대기 (빠른 응답인지 확인)
+                # 3초 대기 (빠른 응답인지 확인)
                 try:
-                    # 4초 동안 처리가 완료되는지 기다림
+                    # 3초 동안 처리가 완료되는지 기다림
                     result = await asyncio.wait_for(
                         self._process_message_async(user_message),
-                        timeout=4.0
+                        timeout=3.0
                     )
                     
-                    # 4초 이내에 결과가 나온 경우
-                    print("[SUCCESS] 4초 이내에 결과 완료")
+                    # 3초 이내에 결과가 나온 경우
+                    print("[SUCCESS] 3초 이내에 결과 완료")
                     background_task.cancel()  # 백그라운드 태스크 취소
                     
                     # 즉시 응답
@@ -123,8 +123,8 @@ class HanwhaEaglesChatbot:
                     return immediate_response
                     
                 except asyncio.TimeoutError:
-                    # 4초가 지나서 타임아웃된 경우
-                    print("[INFO] 4초 타임아웃 - 백그라운드 처리로 전환")
+                    # 3초가 지나서 타임아웃된 경우
+                    print("[INFO] 3초 타임아웃 - 백그라운드 처리로 전환")
                     
                     # 즉시 "기다리는 메시지" 응답
                     waiting_response = {
@@ -134,7 +134,7 @@ class HanwhaEaglesChatbot:
                             "outputs": [
                                 {
                                     "simpleText": {
-                                        "text": "답변을 입력중입니다 . . ."
+                                        "text": "잠시만 기다려주세요!"
                                     }
                                 }
                             ]
