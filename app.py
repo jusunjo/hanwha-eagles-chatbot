@@ -69,38 +69,90 @@ def handle_kakao():
                 }
             })
         
-        # 비동기 함수를 동기적으로 실행
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            response = loop.run_until_complete(
-                kakao_service.process_kakao_request(data)
-            )
+        # 카카오톡 형식인지 확인
+        if 'userRequest' in data:
+            # 카카오톡 형식 - 기존 로직 사용
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            # 응답 형식 검증
-            print(f"[APP] 카카오 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+            try:
+                response = loop.run_until_complete(
+                    kakao_service.process_kakao_request(data)
+                )
+                
+                # 응답 형식 검증
+                print(f"[APP] 카카오 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+                
+                # 필수 필드 확인
+                if 'version' not in response or 'template' not in response:
+                    print(f"[ERROR] 응답에 필수 필드가 누락됨: {response}")
+                    # 기본 형식으로 재생성
+                    response = {
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [
+                                {
+                                    "simpleText": {
+                                        "text": response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text', '응답 형식 오류')
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                
+                return jsonify(response)
+            finally:
+                loop.close()
+                
+        elif 'message' in data:
+            # 간단한 메시지 형식 - 즉시 처리
+            user_message = data.get('message', '')
             
-            # 필수 필드 확인
-            if 'version' not in response or 'template' not in response:
-                print(f"[ERROR] 응답에 필수 필드가 누락됨: {response}")
-                # 기본 형식으로 재생성
-                response = {
+            if not user_message:
+                return jsonify({
                     "version": "2.0",
                     "template": {
                         "outputs": [
                             {
                                 "simpleText": {
-                                    "text": response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text', '응답 형식 오류')
+                                    "text": "메시지가 필요합니다."
                                 }
                             }
                         ]
                     }
-                }
+                })
             
-            return jsonify(response)
-        finally:
-            loop.close()
+            # 챗봇 응답 생성
+            response_text = chatbot.get_response(user_message)
+            
+            # 카카오톡 형식으로 응답
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": response_text
+                            }
+                        }
+                    ]
+                }
+            })
+            
+        else:
+            # 지원하지 않는 형식
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "지원하지 않는 요청 형식입니다."
+                            }
+                        }
+                    ]
+                }
+            })
             
     except Exception as e:
         print(f"Error processing Kakao message: {str(e)}")
