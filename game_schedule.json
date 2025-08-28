@@ -1,0 +1,474 @@
+{
+  "schedule": [
+    {
+      "date": "08.01(금)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KIA",
+      "awayTeamCode": "HT",
+      "score": "2-3",
+      "stadium": "광주"
+    },
+    {
+      "date": "08.02(토)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KIA",
+      "awayTeamCode": "HT",
+      "status": "우천취소",
+      "stadium": "광주"
+    },
+    {
+      "date": "08.03(일)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KIA",
+      "awayTeamCode": "HT",
+      "status": "우천취소",
+      "stadium": "광주"
+    },
+    {
+      "date": "08.05(화)",
+      "time": "18:30",
+      "homeTeam": "KT",
+      "homeTeamCode": "KT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "5-2",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.06(수)",
+      "time": "18:30",
+      "homeTeam": "KT",
+      "homeTeamCode": "KT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "4-5",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.07(목)",
+      "time": "18:30",
+      "homeTeam": "KT",
+      "homeTeamCode": "KT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "5-4",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.08(금)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "LG",
+      "awayTeamCode": "LG",
+      "score": "1-2",
+      "stadium": "잠실"
+    },
+    {
+      "date": "08.09(토)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "LG",
+      "awayTeamCode": "LG",
+      "score": "1-8",
+      "stadium": "잠실"
+    },
+    {
+      "date": "08.10(일)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "LG",
+      "awayTeamCode": "LG",
+      "score": "5-4",
+      "stadium": "잠실"
+    },
+    {
+      "date": "08.12(화)",
+      "time": "18:30",
+      "homeTeam": "롯데",
+      "homeTeamCode": "LT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "0-2",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.13(수)",
+      "time": "18:30",
+      "homeTeam": "롯데",
+      "homeTeamCode": "LT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "0-6",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.14(목)",
+      "time": "18:30",
+      "homeTeam": "롯데",
+      "homeTeamCode": "LT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "4-5",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.15(금)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "NC",
+      "awayTeamCode": "NC",
+      "score": "9-2",
+      "stadium": "창원"
+    },
+    {
+      "date": "08.16(토)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "NC",
+      "awayTeamCode": "NC",
+      "score": "6-9",
+      "stadium": "창원"
+    },
+    {
+      "date": "08.17(일)",
+      "time": "18:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "NC",
+      "awayTeamCode": "NC",
+      "score": "4-9",
+      "stadium": "창원"
+    },
+    {
+      "date": "08.19(화)",
+      "time": "18:30",
+      "homeTeam": "두산",
+      "homeTeamCode": "OB",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "6-5",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.20(수)",
+      "time": "18:30",
+      "homeTeam": "두산",
+      "homeTeamCode": "OB",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "13-9",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.21(목)",
+      "time": "18:30",
+      "homeTeam": "두산",
+      "homeTeamCode": "OB",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "6-3",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.22(금)",
+      "time": "18:30",
+      "homeTeam": "SSG",
+      "homeTeamCode": "SK",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "1-0",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.23(토)",
+      "time": "18:00",
+      "homeTeam": "SSG",
+      "homeTeamCode": "SK",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "0-5",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.24(일)",
+      "time": "18:00",
+      "homeTeam": "SSG",
+      "homeTeamCode": "SK",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "score": "2-5",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.26(화)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "키움",
+      "awayTeamCode": "WO",
+      "status": "예정",
+      "stadium": "고척"
+    },
+    {
+      "date": "08.27(수)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "키움",
+      "awayTeamCode": "WO",
+      "status": "예정",
+      "stadium": "고척"
+    },
+    {
+      "date": "08.28(목)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "키움",
+      "awayTeamCode": "WO",
+      "status": "예정",
+      "stadium": "고척"
+    },
+    {
+      "date": "08.29(금)",
+      "time": "18:30",
+      "homeTeam": "삼성",
+      "homeTeamCode": "SS",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.30(토)",
+      "time": "18:00",
+      "homeTeam": "삼성",
+      "homeTeamCode": "SS",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "08.31(일)",
+      "time": "18:00",
+      "homeTeam": "삼성",
+      "homeTeamCode": "SS",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.02(화)",
+      "time": "18:30",
+      "homeTeam": "KIA",
+      "homeTeamCode": "HT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.03(수)",
+      "time": "18:30",
+      "homeTeam": "NC",
+      "homeTeamCode": "NC",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.06(토)",
+      "time": "17:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "삼성",
+      "awayTeamCode": "SS",
+      "status": "예정",
+      "stadium": "대구"
+    },
+    {
+      "date": "09.07(일)",
+      "time": "17:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "삼성",
+      "awayTeamCode": "SS",
+      "status": "예정",
+      "stadium": "대구"
+    },
+    {
+      "date": "09.09(화)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "롯데",
+      "awayTeamCode": "LT",
+      "status": "예정",
+      "stadium": "사직"
+    },
+    {
+      "date": "09.10(수)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "롯데",
+      "awayTeamCode": "LT",
+      "status": "예정",
+      "stadium": "사직"
+    },
+    {
+      "date": "09.12(금)",
+      "time": "18:30",
+      "homeTeam": "키움",
+      "homeTeamCode": "WO",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.13(토)",
+      "time": "17:00",
+      "homeTeam": "키움",
+      "homeTeamCode": "WO",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.14(일)",
+      "time": "17:00",
+      "homeTeam": "키움",
+      "homeTeamCode": "WO",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.16(화)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KIA",
+      "awayTeamCode": "HT",
+      "status": "예정",
+      "stadium": "광주"
+    },
+    {
+      "date": "09.17(수)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KIA",
+      "awayTeamCode": "HT",
+      "status": "예정",
+      "stadium": "광주"
+    },
+    {
+      "date": "09.18(목)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KIA",
+      "awayTeamCode": "HT",
+      "status": "예정",
+      "stadium": "광주"
+    },
+    {
+      "date": "09.19(금)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KT",
+      "awayTeamCode": "KT",
+      "status": "예정",
+      "stadium": "수원"
+    },
+    {
+      "date": "09.20(토)",
+      "time": "17:00",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "KT",
+      "awayTeamCode": "KT",
+      "status": "예정",
+      "stadium": "수원"
+    },
+    {
+      "date": "09.24(수)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "SSG",
+      "awayTeamCode": "SK",
+      "status": "예정",
+      "stadium": "문학"
+    },
+    {
+      "date": "09.25(목)",
+      "time": "18:30",
+      "homeTeam": "한화",
+      "homeTeamCode": "HH",
+      "awayTeam": "두산",
+      "awayTeamCode": "OB",
+      "status": "예정",
+      "stadium": "잠실"
+    },
+    {
+      "date": "09.26(금)",
+      "time": "18:30",
+      "homeTeam": "LG",
+      "homeTeamCode": "LG",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.27(토)",
+      "time": "17:00",
+      "homeTeam": "LG",
+      "homeTeamCode": "LG",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.28(일)",
+      "time": "14:00",
+      "homeTeam": "LG",
+      "homeTeamCode": "LG",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    },
+    {
+      "date": "09.30(화)",
+      "time": "18:30",
+      "homeTeam": "롯데",
+      "homeTeamCode": "LT",
+      "awayTeam": "한화",
+      "awayTeamCode": "HH",
+      "status": "예정",
+      "stadium": "대전"
+    }
+  ]
+}
