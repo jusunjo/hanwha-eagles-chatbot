@@ -116,6 +116,7 @@ class HanwhaEaglesChatbot:
                     # 즉시 응답
                     immediate_response = {
                         "version": "2.0",
+                        "useCallback": True,
                         "template": {
                             "outputs": [
                                 {
@@ -165,6 +166,7 @@ class HanwhaEaglesChatbot:
                 response_text = await self._process_message_async(user_message)
                 return {
                     "version": "2.0",
+                    "useCallback": True,
                     "template": {
                         "outputs": [
                             {
@@ -209,6 +211,7 @@ class HanwhaEaglesChatbot:
             # 에러 응답
             error_response = {
                 "version": "2.0",
+                "useCallback": True,
                 "template": {
                     "outputs": [
                         {

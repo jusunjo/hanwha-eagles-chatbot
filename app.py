@@ -95,6 +95,8 @@ def handle_chat():
                     chatbot._process_message_async(user_message)
                 )
                 response = {
+                    "version": "2.0",
+                    "useCallback": True,
                     "user_message": user_message,
                     "bot_response": response_text
                 }
