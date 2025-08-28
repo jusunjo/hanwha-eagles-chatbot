@@ -32,20 +32,33 @@ class KakaoService:
             # 사용자 정보 및 파라미터 추출
             user_id = request_data['userRequest']['user']['id']
             utterance = request_data['userRequest']['utterance']
-            callback_url = request_data['userRequest']['callbackUrl']
+            
+            # action.params.message에서 실제 질문 추출
+            if 'action' in request_data and 'params' in request_data['action']:
+                question = request_data['action']['params'].get('message', utterance)
+            else:
+                question = utterance
             
             print(f"[DEBUG] 사용자 ID: {user_id}")
             print(f"[DEBUG] 전체 발화문: {utterance}")
+            print(f"[DEBUG] 실제 질문: {question}")
+            
+            # callbackUrl이 없는 경우 즉시 응답으로 처리
+            if 'callbackUrl' not in request_data.get('userRequest', {}):
+                print(f"[INFO] callbackUrl이 없어 즉시 응답으로 처리")
+                return await self._process_immediate_response(question)
+            
+            callback_url = request_data['userRequest']['callbackUrl']
             print(f"[DEBUG] 콜백 URL: {callback_url}")
             
             # 백그라운드에서 실제 챗봇 작업을 처리하는 함수
             async def process_chatbot_background():
                 try:
-                    print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 사용자: {user_id}, 질문: {utterance}")
+                    print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 사용자: {user_id}, 질문: {question}")
                     
                     # 챗봇 서비스 호출 (동기 함수를 비동기로 실행)
                     loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, self.chatbot.get_response, utterance)
+                    result = await loop.run_in_executor(None, self.chatbot.get_response, question)
                     
                     if result:
                         print(f"[BACKGROUND] 챗봇 답변 생성 완료: {result}")
@@ -114,7 +127,7 @@ class KakaoService:
                 # 4초 동안 챗봇 작업이 완료되는지 기다림
                 loop = asyncio.get_event_loop()
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(None, self.chatbot.get_response, utterance),
+                    loop.run_in_executor(None, self.chatbot.get_response, question),
                     timeout=4.0
                 )
                 
@@ -172,7 +185,7 @@ class KakaoService:
             print(f"[ERROR] 예외 발생: {str(e)}")
             print(f"[ERROR] 예외 타입: {type(e).__name__}")
             
-            # 에러 발생 시 콜백으로 에러 메시지 전송
+            # 에러 발생 시 콜백으로 에러 메시지 전송 (callbackUrl이 있는 경우만)
             try:
                 callback_url = request_data.get('userRequest', {}).get('callbackUrl')
                 if callback_url:
@@ -215,6 +228,54 @@ class KakaoService:
             }
             print(f"[DEBUG] 에러 응답 데이터: {json.dumps(error_response, ensure_ascii=False, indent=2)}")
             return error_response
+    
+    async def _process_immediate_response(self, question: str) -> Dict[str, Any]:
+        """즉시 응답 처리 (callbackUrl이 없는 경우)"""
+        try:
+            print(f"[DEBUG] 즉시 응답 처리 시작 - 질문: {question}")
+            
+            # 챗봇 서비스 호출 (동기 함수를 비동기로 실행)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self.chatbot.get_response, question)
+            
+            if result:
+                print(f"[DEBUG] 챗봇 답변: {result}")
+                response_text = result
+            else:
+                print(f"[ERROR] 챗봇 처리 실패")
+                response_text = "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
+            
+            # 즉시 응답
+            immediate_response = {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": response_text
+                            }
+                        }
+                    ]
+                }
+            }
+            
+            print(f"[DEBUG] 즉시 응답 데이터: {json.dumps(immediate_response, ensure_ascii=False, indent=2)}")
+            return immediate_response
+            
+        except Exception as e:
+            print(f"[ERROR] 즉시 응답 처리 중 오류: {str(e)}")
+            return {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                            }
+                        }
+                    ]
+                }
+            }
 
 
 # Create a singleton instance
