@@ -4,6 +4,7 @@ import asyncio
 from dotenv import load_dotenv
 from chatbot_service import HanwhaEaglesChatbot
 from kakao_service import kakao_service
+import json
 
 # 환경 변수 로드
 load_dotenv()
@@ -56,7 +57,16 @@ def handle_kakao():
         
         if not data:
             return jsonify({
-                "error": "요청 데이터가 없습니다."
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "요청 데이터가 없습니다."
+                            }
+                        }
+                    ]
+                }
             })
         
         # 비동기 함수를 동기적으로 실행
@@ -67,6 +77,27 @@ def handle_kakao():
             response = loop.run_until_complete(
                 kakao_service.process_kakao_request(data)
             )
+            
+            # 응답 형식 검증
+            print(f"[APP] 카카오 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+            
+            # 필수 필드 확인
+            if 'version' not in response or 'template' not in response:
+                print(f"[ERROR] 응답에 필수 필드가 누락됨: {response}")
+                # 기본 형식으로 재생성
+                response = {
+                    "version": "2.0",
+                    "template": {
+                        "outputs": [
+                            {
+                                "simpleText": {
+                                    "text": response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text', '응답 형식 오류')
+                                }
+                            }
+                        ]
+                    }
+                }
+            
             return jsonify(response)
         finally:
             loop.close()

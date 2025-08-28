@@ -14,6 +14,25 @@ class KakaoService:
     def __init__(self):
         self.chatbot = HanwhaEaglesChatbot()
     
+    def _create_kakao_response(self, text: str) -> Dict[str, Any]:
+        """카카오톡 챗봇 응답 형식 생성 (스키마 검증)"""
+        response = {
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": text
+                        }
+                    }
+                ]
+            }
+        }
+        
+        # 응답 형식 검증
+        print(f"[VALIDATION] 생성된 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+        return response
+    
     async def process_kakao_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process Kakao request with Hanwha Eagles chatbot.
@@ -49,38 +68,14 @@ class KakaoService:
             else:
                 # 지원하지 않는 형식
                 print(f"[ERROR] 지원하지 않는 요청 형식")
-                return {
-                    "version": "2.0",
-                    "template": {
-                        "outputs": [
-                            {
-                                "simpleText": {
-                                    "text": "지원하지 않는 요청 형식입니다."
-                                }
-                            }
-                        ]
-                    }
-                }
+                return self._create_kakao_response("지원하지 않는 요청 형식입니다.")
             
         except Exception as e:
             print(f"[ERROR] 예외 발생: {str(e)}")
             print(f"[ERROR] 예외 타입: {type(e).__name__}")
             
             # 에러 응답
-            error_response = {
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
-                            }
-                        }
-                    ]
-                }
-            }
-            print(f"[DEBUG] 에러 응답 데이터: {json.dumps(error_response, ensure_ascii=False, indent=2)}")
-            return error_response
+            return self._create_kakao_response("요청 처리 중 오류가 발생했어요. 다시 시도해주세요.")
     
     async def _process_simple_message(self, user_message: str) -> Dict[str, Any]:
         """간단한 메시지 형식 처리"""
@@ -91,37 +86,12 @@ class KakaoService:
             
             print(f"[DEBUG] 챗봇 답변: {result}")
             
-            # 즉시 응답
-            immediate_response = {
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": result
-                            }
-                        }
-                    ]
-                }
-            }
-            
-            print(f"[DEBUG] 즉시 응답 데이터: {json.dumps(immediate_response, ensure_ascii=False, indent=2)}")
-            return immediate_response
+            # 카카오톡 형식으로 응답 생성
+            return self._create_kakao_response(result)
             
         except Exception as e:
             print(f"[ERROR] 간단한 메시지 처리 중 오류: {str(e)}")
-            return {
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
-                            }
-                        }
-                    ]
-                }
-            }
+            return self._create_kakao_response("AI 처리 중 오류가 발생했어요. 다시 시도해주세요.")
     
     async def _process_kakao_format(self, utterance: str) -> Dict[str, Any]:
         """카카오톡 형식 처리 (콜백 없이 즉시 응답)"""
@@ -134,37 +104,12 @@ class KakaoService:
             
             print(f"[DEBUG] 챗봇 답변: {result}")
             
-            # 즉시 응답 (카카오톡 형식)
-            immediate_response = {
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": result
-                            }
-                        }
-                    ]
-                }
-            }
-            
-            print(f"[DEBUG] 즉시 응답 데이터: {json.dumps(immediate_response, ensure_ascii=False, indent=2)}")
-            return immediate_response
+            # 카카오톡 형식으로 응답 생성
+            return self._create_kakao_response(result)
                 
         except Exception as e:
             print(f"[ERROR] 카카오톡 형식 처리 중 오류: {str(e)}")
-            return {
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
-                            }
-                        }
-                    ]
-                }
-            }
+            return self._create_kakao_response("AI 처리 중 오류가 발생했어요. 다시 시도해주세요.")
 
 
 # Create a singleton instance
