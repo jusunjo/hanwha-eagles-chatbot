@@ -44,20 +44,35 @@ def handle_chat():
         
         # 사용자 메시지 추출
         user_message = data.get('message', '')
+        callback_url = data.get('callback_url', None)  # 콜백 URL 추가
         
         if not user_message:
             return jsonify({
                 "error": "메시지를 입력해주세요."
             })
         
-        # 챗봇 응답 생성
-        response_text = chatbot.get_response(user_message)
+        # 비동기 챗봇 응답 생성
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        # AI 응답만 반환
-        return jsonify({
-            "user_message": user_message,
-            "bot_response": response_text
-        })
+        try:
+            if callback_url:
+                # 콜백 URL이 있는 경우 비동기 처리
+                response = loop.run_until_complete(
+                    chatbot.get_response_async(user_message, callback_url)
+                )
+                return jsonify(response)
+            else:
+                # 콜백 URL이 없는 경우 동기 처리
+                response_text = loop.run_until_complete(
+                    chatbot._process_message_async(user_message)
+                )
+                return jsonify({
+                    "user_message": user_message,
+                    "bot_response": response_text
+                })
+        finally:
+            loop.close()
         
     except Exception as e:
         print(f"Error processing message: {str(e)}")

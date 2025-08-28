@@ -1,6 +1,8 @@
 import os
 import json
 import re
+import asyncio
+import httpx
 from datetime import datetime
 from openai import OpenAI
 from data_manager import HanwhaEaglesDataManager
@@ -15,12 +17,198 @@ class HanwhaEaglesChatbot:
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         self.data_manager = HanwhaEaglesDataManager()
         
-    def get_response(self, user_message: str) -> str:
-        """사용자 메시지에 대한 응답 생성"""
+    async def get_response_async(self, user_message: str, callback_url: str = None) -> Dict[str, Any]:
+        """사용자 메시지에 대한 응답 생성 (비동기 + 콜백 지원)"""
         try:
             print(f"\n🤖 ===== 챗봇 응답 생성 시작 =====")
             print(f"📝 사용자 메시지: {user_message}")
+            print(f"🔗 콜백 URL: {callback_url}")
             
+            # 백그라운드에서 실제 처리를 하는 함수
+            async def process_chatbot_background():
+                try:
+                    print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 질문: {user_message}")
+                    
+                    # 기존 동기 메서드를 비동기로 실행
+                    response_text = await self._process_message_async(user_message)
+                    
+                    print(f"[BACKGROUND] 챗봇 답변 생성 완료: {response_text}")
+                    
+                    # 콜백으로 최종 결과 전송
+                    if callback_url:
+                        final_callback_response = {
+                            "version": "2.0",
+                            "useCallback": True,
+                            "template": {
+                                "outputs": [
+                                    {
+                                        "simpleText": {
+                                            "text": response_text
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                        
+                        async with httpx.AsyncClient(timeout=60.0) as client:
+                            response = await client.post(
+                                callback_url,
+                                json=final_callback_response,
+                                headers={"Content-Type": "application/json"}
+                            )
+                            print(f"[BACKGROUND] 최종 결과 콜백 전송 완료 - 상태코드: {response.status_code}")
+                            
+                except Exception as e:
+                    print(f"[BACKGROUND ERROR] 백그라운드 처리 중 오류: {str(e)}")
+                    
+                    # 에러 발생 시에도 콜백으로 에러 메시지 전송
+                    if callback_url:
+                        try:
+                            error_callback_response = {
+                                "version": "2.0",
+                                "useCallback": True,
+                                "template": {
+                                    "outputs": [
+                                        {
+                                            "simpleText": {
+                                                "text": "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                            
+                            async with httpx.AsyncClient(timeout=60.0) as client:
+                                await client.post(
+                                    callback_url,
+                                    json=error_callback_response,
+                                    headers={"Content-Type": "application/json"}
+                                )
+                                print(f"[BACKGROUND] 에러 콜백 전송 완료")
+                        except Exception as callback_error:
+                            print(f"[BACKGROUND ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
+            
+            # 콜백 URL이 있는 경우 백그라운드 처리
+            if callback_url:
+                # 백그라운드에서 챗봇 작업 시작
+                background_task = asyncio.create_task(process_chatbot_background())
+                
+                # 4초 대기 (빠른 응답인지 확인)
+                try:
+                    # 4초 동안 처리가 완료되는지 기다림
+                    result = await asyncio.wait_for(
+                        self._process_message_async(user_message),
+                        timeout=4.0
+                    )
+                    
+                    # 4초 이내에 결과가 나온 경우
+                    print("[SUCCESS] 4초 이내에 결과 완료")
+                    background_task.cancel()  # 백그라운드 태스크 취소
+                    
+                    # 즉시 응답
+                    immediate_response = {
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [
+                                {
+                                    "simpleText": {
+                                        "text": result
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                    
+                    print(f"[DEBUG] 즉시 응답 데이터: {json.dumps(immediate_response, ensure_ascii=False, indent=2)}")
+                    return immediate_response
+                    
+                except asyncio.TimeoutError:
+                    # 4초가 지나서 타임아웃된 경우
+                    print("[INFO] 4초 타임아웃 - 백그라운드 처리로 전환")
+                    
+                    # 즉시 "기다리는 메시지" 응답
+                    waiting_response = {
+                        "version": "2.0",
+                        "useCallback": True,
+                        "template": {
+                            "outputs": [
+                                {
+                                    "simpleText": {
+                                        "text": "답변을 입력중입니다 . . ."
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                    
+                    print(f"[DEBUG] 대기 메시지 응답: {json.dumps(waiting_response, ensure_ascii=False, indent=2)}")
+                    return waiting_response
+            
+            else:
+                # 콜백 URL이 없는 경우 동기 처리
+                response_text = await self._process_message_async(user_message)
+                return {
+                    "version": "2.0",
+                    "template": {
+                        "outputs": [
+                            {
+                                "simpleText": {
+                                    "text": response_text
+                                }
+                            }
+                        ]
+                    }
+                }
+            
+        except Exception as e:
+            print(f"❌ Error generating response: {str(e)}")
+            
+            # 에러 발생 시 콜백으로 에러 메시지 전송
+            if callback_url:
+                try:
+                    error_callback_response = {
+                        "version": "2.0",
+                        "useCallback": True,
+                        "template": {
+                            "outputs": [
+                                {
+                                    "simpleText": {
+                                        "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                    
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        await client.post(
+                            callback_url,
+                            json=error_callback_response,
+                            headers={"Content-Type": "application/json"}
+                        )
+                        print(f"[CALLBACK] 에러 콜백 전송 완료")
+                except Exception as callback_error:
+                    print(f"[CALLBACK ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
+            
+            # 에러 응답
+            error_response = {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                            }
+                        }
+                    ]
+                }
+            }
+            print(f"[DEBUG] 에러 응답 데이터: {json.dumps(error_response, ensure_ascii=False, indent=2)}")
+            return error_response
+    
+    async def _process_message_async(self, user_message: str) -> str:
+        """사용자 메시지를 비동기로 처리"""
+        try:
             # 한화이글스 전체 데이터 가져오기 (날것의 JSON)
             current_data = self.data_manager.get_current_data()
             print(f"📊 현재 데이터 크기: {len(str(current_data))} characters")
@@ -52,7 +240,22 @@ class HanwhaEaglesChatbot:
             return ai_response
             
         except Exception as e:
-            print(f"❌ Error generating response: {str(e)}")
+            print(f"❌ Error processing message: {str(e)}")
+            return "죄송합니다. 현재 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
+    
+    def get_response(self, user_message: str) -> str:
+        """사용자 메시지에 대한 응답 생성 (기존 동기 메서드 - 하위 호환성)"""
+        try:
+            # 동기적으로 처리
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                response = loop.run_until_complete(self._process_message_async(user_message))
+                return response
+            finally:
+                loop.close()
+        except Exception as e:
+            print(f"❌ Error in sync method: {str(e)}")
             return "죄송합니다. 현재 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
     
     def _extract_and_fetch_multiple_players_data(self, user_message: str) -> List[Dict[str, Any]]:
