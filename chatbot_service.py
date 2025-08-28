@@ -33,12 +33,12 @@ class HanwhaEaglesChatbot:
             # 백그라운드에서 실제 처리를 하는 함수
             async def process_chatbot_background():
                 try:
-                    print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 질문: {user_message}")
+                    print(f"[CALLBACK] 백그라운드 처리 시작 - 콜백 URL: {callback_url}")
                     
                     # 기존 동기 메서드를 비동기로 실행
                     response_text = await self._process_message_async(user_message)
                     
-                    print(f"[BACKGROUND] 챗봇 답변 생성 완료: {response_text}")
+                    print(f"[CALLBACK] 백그라운드 처리 완료 - 콜백 전송 시작")
                     
                     # 콜백으로 최종 결과 전송
                     if callback_url:
@@ -56,17 +56,17 @@ class HanwhaEaglesChatbot:
                             }
                         }
                         
-                        print(f"[BACKGROUND] 콜백 전송 시작: {callback_url}")
+                        print(f"[CALLBACK] 콜백 전송 시작: {callback_url}")
                         async with httpx.AsyncClient(timeout=60.0) as client:
                             response = await client.post(
                                 callback_url,
                                 json=final_callback_response,
                                 headers={"Content-Type": "application/json"}
                             )
-                            print(f"[BACKGROUND] 최종 결과 콜백 전송 완료 - 상태코드: {response.status_code}")
+                            print(f"[CALLBACK] 콜백 전송 완료 - 상태코드: {response.status_code}")
                             
                 except Exception as e:
-                    print(f"[BACKGROUND ERROR] 백그라운드 처리 중 오류: {str(e)}")
+                    print(f"[CALLBACK ERROR] 백그라운드 처리 중 오류: {str(e)}")
                     
                     # 에러 발생 시에도 콜백으로 에러 메시지 전송
                     if callback_url:
@@ -85,27 +85,27 @@ class HanwhaEaglesChatbot:
                                 }
                             }
                             
-                            print(f"[BACKGROUND] 에러 콜백 전송 시작: {callback_url}")
+                            print(f"[CALLBACK] 에러 콜백 전송 시작: {callback_url}")
                             async with httpx.AsyncClient(timeout=60.0) as client:
                                 await client.post(
                                     callback_url,
                                     json=error_callback_response,
                                     headers={"Content-Type": "application/json"}
                                 )
-                                print(f"[BACKGROUND] 에러 콜백 전송 완료")
+                                print(f"[CALLBACK] 에러 콜백 전송 완료")
                         except Exception as callback_error:
-                            print(f"[BACKGROUND ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
+                            print(f"[CALLBACK ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
             
             # 콜백 URL이 있는 경우 백그라운드 처리
             if callback_url:
-                print(f"[DEBUG] 콜백 URL 감지됨 - 백그라운드 처리 시작")
+                print(f"[CALLBACK] 백그라운드 처리 시작 - 콜백 URL: {callback_url}")
                 
                 # 백그라운드에서 챗봇 작업 시작
                 background_task = asyncio.create_task(process_chatbot_background())
                 
                 # 3초 대기 (빠른 응답인지 확인)
                 try:
-                    print("[DEBUG] 3초 타임아웃 시작...")
+                    print("[CALLBACK] 3초 타임아웃 시작...")
                     # 3초 동안 처리가 완료되는지 기다림
                     result = await asyncio.wait_for(
                         self._process_message_async(user_message),
@@ -113,7 +113,7 @@ class HanwhaEaglesChatbot:
                     )
                     
                     # 3초 이내에 결과가 나온 경우
-                    print("[SUCCESS] 3초 이내에 결과 완료")
+                    print("[CALLBACK] 3초 이내에 결과 완료 - 백그라운드 태스크 취소")
                     background_task.cancel()  # 백그라운드 태스크 취소
                     
                     # 즉시 응답
@@ -131,12 +131,12 @@ class HanwhaEaglesChatbot:
                         }
                     }
                     
-                    print(f"[DEBUG] 즉시 응답 반환")
+                    print(f"[CALLBACK] 즉시 응답 반환")
                     return immediate_response
                     
                 except asyncio.TimeoutError:
                     # 3초가 지나서 타임아웃된 경우
-                    print("[INFO] 3초 타임아웃 - 백그라운드 처리로 전환")
+                    print("[CALLBACK] 3초 타임아웃 - 백그라운드 처리로 전환")
                     
                     # 즉시 "기다리는 메시지" 응답
                     waiting_response = {
@@ -153,12 +153,12 @@ class HanwhaEaglesChatbot:
                         }
                     }
                     
-                    print(f"[DEBUG] 대기 메시지 응답 반환")
+                    print(f"[CALLBACK] 대기 메시지 응답 반환")
                     return waiting_response
             
             else:
                 # 콜백 URL이 없는 경우 동기 처리
-                print("[DEBUG] 콜백 URL이 없어서 동기 처리")
+                print("[CALLBACK] 콜백 URL이 없어서 동기 처리")
                 response_text = await self._process_message_async(user_message)
                 return {
                     "version": "2.0",
@@ -218,7 +218,7 @@ class HanwhaEaglesChatbot:
                     ]
                 }
             }
-            print(f"[DEBUG] 에러 응답 반환")
+            print(f"[CALLBACK] 에러 응답 반환")
             return error_response
     
     async def _process_message_async(self, user_message: str) -> str:
@@ -226,24 +226,20 @@ class HanwhaEaglesChatbot:
         try:
             # 테스트용: 특정 키워드로 지연 시뮬레이션
             if "느리게" in user_message or "slow" in user_message.lower():
-                print("[TEST] 느린 응답 시뮬레이션 시작 (5초 대기)")
+                print("[CALLBACK] 느린 응답 시뮬레이션 시작 (5초 대기)")
                 await asyncio.sleep(5)  # 5초 대기
-                print("[TEST] 느린 응답 시뮬레이션 완료")
+                print("[CALLBACK] 느린 응답 시뮬레이션 완료")
             
             # 한화이글스 전체 데이터 가져오기 (날것의 JSON)
             current_data = self.data_manager.get_current_data()
-            print(f"📊 현재 데이터 크기: {len(str(current_data))} characters")
             
             # 사용자 메시지에서 선수 이름들을 감지하고 각각의 선수 데이터 가져오기
             players_data = self._extract_and_fetch_multiple_players_data(user_message)
-            print(f"👥 사용된 선수 데이터 수: {len(players_data)}")
             
             # OpenAI API를 사용한 응답 생성
             system_prompt = self._create_system_prompt(current_data, players_data, user_message)
-            print(f"📋 시스템 프롬프트 길이: {len(system_prompt)} characters")
-            print(f"📋 시스템 프롬프트 미리보기: {system_prompt[:200]}...")
             
-            print(f"🚀 OpenAI API 호출 시작...")
+            print(f"[CALLBACK] OpenAI API 호출 시작...")
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -255,13 +251,12 @@ class HanwhaEaglesChatbot:
             )
             
             ai_response = response.choices[0].message.content.strip()
-            print(f"🤖 AI 응답: {ai_response}")
-            print(f"🤖 ===== 챗봇 응답 생성 완료 =====")
+            print(f"[CALLBACK] AI 응답 생성 완료")
             
             return ai_response
             
         except Exception as e:
-            print(f"❌ Error processing message: {str(e)}")
+            print(f"[CALLBACK ERROR] Error processing message: {str(e)}")
             return "죄송합니다. 현재 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
     
     def get_response(self, user_message: str) -> str:
