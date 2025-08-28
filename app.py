@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify
 import os
+import asyncio
 from dotenv import load_dotenv
 from chatbot_service import HanwhaEaglesChatbot
+from kakao_service import kakao_service
 
 # 환경 변수 로드
 load_dotenv()
@@ -44,6 +46,44 @@ def handle_chat():
         print(f"Error processing message: {str(e)}")
         return jsonify({
             "error": "죄송합니다. 처리 중 오류가 발생했습니다. 다시 시도해주세요."
+        })
+
+@app.route('/kakao', methods=['POST'])
+def handle_kakao():
+    """카카오톡 챗봇 메시지 처리"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                "error": "요청 데이터가 없습니다."
+            })
+        
+        # 비동기 함수를 동기적으로 실행
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            response = loop.run_until_complete(
+                kakao_service.process_kakao_request(data)
+            )
+            return jsonify(response)
+        finally:
+            loop.close()
+            
+    except Exception as e:
+        print(f"Error processing Kakao message: {str(e)}")
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                        }
+                    }
+                ]
+            }
         })
 
 @app.route('/test', methods=['POST'])
