@@ -40,42 +40,76 @@ def health_check():
 def handle_chat():
     """AI 챗봇 메시지 처리"""
     try:
-        data = request.get_json()
+        print(f"\n[APP-CHAT] ===== /chat 엔드포인트 호출 시작 =====")
         
-        # 사용자 메시지 추출
+        # 요청 헤더 로깅
+        print(f"[APP-CHAT] 요청 헤더:")
+        for header, value in request.headers.items():
+            print(f"   {header}: {value}")
+        
+        # 요청 데이터 로깅
+        data = request.get_json()
+        print(f"[APP-CHAT] 받은 요청 데이터:")
+        print(f"   - 데이터 타입: {type(data)}")
+        print(f"   - 데이터 내용: {json.dumps(data, ensure_ascii=False, indent=2) if data else 'None'}")
+        
+        if not data:
+            print(f"[APP-CHAT] 요청 데이터가 비어있음")
+            return jsonify({
+                "error": "요청 데이터가 없습니다."
+            })
+        
+        # 사용자 메시지 및 콜백 URL 추출
         user_message = data.get('message', '')
-        callback_url = data.get('callback_url', None)  # 콜백 URL 추가
+        callback_url = data.get('callback_url', None)
+        
+        print(f"[APP-CHAT] 추출된 정보:")
+        print(f"   - 사용자 메시지: {user_message}")
+        print(f"   - 콜백 URL: {callback_url}")
+        print(f"   - 콜백 URL 타입: {type(callback_url)}")
         
         if not user_message:
+            print(f"[APP-CHAT] 사용자 메시지가 비어있음")
             return jsonify({
                 "error": "메시지를 입력해주세요."
             })
         
         # 비동기 챗봇 응답 생성
+        print(f"[APP-CHAT] 챗봇 응답 생성 시작...")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         try:
             if callback_url:
+                print(f"[APP-CHAT] 콜백 URL이 감지됨 - 비동기 처리 시작")
                 # 콜백 URL이 있는 경우 비동기 처리
                 response = loop.run_until_complete(
                     chatbot.get_response_async(user_message, callback_url)
                 )
+                print(f"[APP-CHAT] 비동기 처리 완료 - 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
                 return jsonify(response)
             else:
+                print(f"[APP-CHAT] 콜백 URL이 없음 - 동기 처리 시작")
                 # 콜백 URL이 없는 경우 동기 처리
                 response_text = loop.run_until_complete(
                     chatbot._process_message_async(user_message)
                 )
-                return jsonify({
+                response = {
                     "user_message": user_message,
                     "bot_response": response_text
-                })
+                }
+                print(f"[APP-CHAT] 동기 처리 완료 - 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+                return jsonify(response)
         finally:
             loop.close()
+            print(f"[APP-CHAT] 비동기 루프 정리 완료")
         
     except Exception as e:
-        print(f"Error processing message: {str(e)}")
+        print(f"[APP-CHAT ERROR] 예외 발생: {str(e)}")
+        print(f"[APP-CHAT ERROR] 예외 타입: {type(e).__name__}")
+        import traceback
+        print(f"[APP-CHAT ERROR] 스택 트레이스: {traceback.format_exc()}")
+        
         return jsonify({
             "error": "죄송합니다. 처리 중 오류가 발생했습니다. 다시 시도해주세요."
         })
