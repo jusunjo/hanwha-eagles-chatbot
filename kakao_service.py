@@ -203,6 +203,67 @@ class KakaoService:
                     print(f"[KAKAO-IMMEDIATE] - text 타입: {type(simple_text.get('text'))}")
                     print(f"[KAKAO-IMMEDIATE] - text 길이: {len(simple_text.get('text', ''))}")
             
+            # === "Must be of the same schema" 에러 원인 추적을 위한 추가 로깅 ===
+            print(f"[KAKAO-SCHEMA-DEBUG] ===== 스키마 에러 원인 추적 시작 =====")
+            
+            # 1. JSON 직렬화 테스트
+            try:
+                import json
+                json_str = json.dumps(immediate_response, ensure_ascii=False)
+                print(f"[KAKAO-SCHEMA-DEBUG] JSON 직렬화 성공: {json_str}")
+                print(f"[KAKAO-SCHEMA-DEBUG] JSON 길이: {len(json_str)}")
+            except Exception as e:
+                print(f"[KAKAO-SCHEMA-DEBUG] JSON 직렬화 실패: {e}")
+            
+            # 2. 숨겨진 문자 확인
+            text_content = immediate_response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text', '')
+            print(f"[KAKAO-SCHEMA-DEBUG] 텍스트 내용 분석:")
+            print(f"[KAKAO-SCHEMA-DEBUG] - 텍스트: '{text_content}'")
+            print(f"[KAKAO-SCHEMA-DEBUG] - 텍스트 바이트: {text_content.encode('utf-8')}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - 텍스트 유니코드: {[ord(c) for c in text_content]}")
+            
+            # 3. 응답 구조 정확성 검증
+            print(f"[KAKAO-SCHEMA-DEBUG] 응답 구조 정확성:")
+            print(f"[KAKAO-SCHEMA-DEBUG] - version이 정확히 '2.0'인가: {immediate_response.get('version') == '2.0'}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - template이 딕셔너리인가: {isinstance(immediate_response.get('template'), dict)}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - outputs가 리스트인가: {isinstance(immediate_response.get('template', {}).get('outputs'), list)}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - outputs[0]이 딕셔너리인가: {isinstance(immediate_response.get('template', {}).get('outputs', [{}])[0], dict)}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - simpleText가 딕셔너리인가: {isinstance(immediate_response.get('template', {}).get('outputs', [{}])[0].get('simpleText'), dict)}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - text가 문자열인가: {isinstance(immediate_response.get('template', {}).get('outputs', [{}])[0].get('simpleText', {}).get('text'), str)}")
+            
+            # 4. 카카오톡 공식 스키마와 비교
+            expected_schema = {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "test"
+                            }
+                        }
+                    ]
+                }
+            }
+            print(f"[KAKAO-SCHEMA-DEBUG] 공식 스키마와 비교:")
+            print(f"[KAKAO-SCHEMA-DEBUG] - expected version: {expected_schema['version']}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - actual version: {immediate_response.get('version')}")
+            print(f"[KAKAO-SCHEMA-DEBUG] - version 일치: {expected_schema['version'] == immediate_response.get('version')}")
+            
+            # 5. 응답 데이터 타입 상세 분석
+            print(f"[KAKAO-SCHEMA-DEBUG] 데이터 타입 상세 분석:")
+            for key, value in immediate_response.items():
+                print(f"[KAKAO-SCHEMA-DEBUG] - {key}: {type(value)} = {value}")
+                if isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        print(f"[KAKAO-SCHEMA-DEBUG]   - {sub_key}: {type(sub_value)} = {sub_value}")
+                        if isinstance(sub_value, list) and sub_value:
+                            for i, item in enumerate(sub_value):
+                                print(f"[KAKAO-SCHEMA-DEBUG]     - [{i}]: {type(item)} = {item}")
+                                if isinstance(item, dict):
+                                    for item_key, item_value in item.items():
+                                        print(f"[KAKAO-SCHEMA-DEBUG]       - {item_key}: {type(item_value)} = {item_value}")
+            
+            print(f"[KAKAO-SCHEMA-DEBUG] ===== 스키마 에러 원인 추적 완료 =====")
             print(f"[KAKAO-IMMEDIATE] ===== 응답 검증 완료 =====")
             print(f"[KAKAO-IMMEDIATE] 즉시 응답 생성 완료")
             print(f"[KAKAO-IMMEDIATE] ===== 즉시 응답 처리 완료 =====")
