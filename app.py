@@ -25,7 +25,6 @@ def handle_chat():
         
         # 사용자 메시지 추출
         user_message = data.get('message', '')
-        user_id = data.get('user_id', 'unknown')
         
         if not user_message:
             return jsonify({
@@ -33,13 +32,12 @@ def handle_chat():
             })
         
         # 챗봇 응답 생성
-        response_text = chatbot.get_response(user_message, user_id)
+        response_text = chatbot.get_response(user_message)
         
         # AI 응답만 반환
         return jsonify({
             "user_message": user_message,
-            "bot_response": response_text,
-            "user_id": user_id
+            "bot_response": response_text
         })
         
     except Exception as e:
@@ -58,7 +56,7 @@ def test_message():
         if not message:
             return jsonify({"error": "메시지가 필요합니다."})
         
-        response = chatbot.get_response(message, 'test_user')
+        response = chatbot.get_response(message)
         
         return jsonify({
             "user_message": message,

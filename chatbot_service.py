@@ -11,7 +11,7 @@ class HanwhaEaglesChatbot:
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         self.data_manager = HanwhaEaglesDataManager()
         
-    def get_response(self, user_message: str, user_id: str = None) -> str:
+    def get_response(self, user_message: str) -> str:
         """사용자 메시지에 대한 응답 생성"""
         try:
             # 한화이글스 전체 데이터 가져오기 (날것의 JSON)
