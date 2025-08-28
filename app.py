@@ -42,11 +42,6 @@ def handle_chat():
     try:
         print(f"\n[APP-CHAT] ===== /chat 엔드포인트 호출 시작 =====")
         
-        # 요청 헤더 로깅
-        print(f"[APP-CHAT] 요청 헤더:")
-        for header, value in request.headers.items():
-            print(f"   {header}: {value}")
-        
         # 요청 데이터 로깅
         data = request.get_json()
         print(f"[APP-CHAT] 받은 요청 데이터:")
@@ -66,7 +61,12 @@ def handle_chat():
         print(f"[APP-CHAT] 추출된 정보:")
         print(f"   - 사용자 메시지: {user_message}")
         print(f"   - 콜백 URL: {callback_url}")
-        print(f"   - 콜백 URL 타입: {type(callback_url)}")
+        
+        # 콜백 URL 체크 및 로깅
+        if callback_url:
+            print(f"[APP-CHAT] ✅ 콜백 URL이 제공됨: {callback_url}")
+        else:
+            print(f"[APP-CHAT] ⚠️ 콜백 URL이 제공되지 않음 - 동기 처리로 진행")
         
         if not user_message:
             print(f"[APP-CHAT] 사용자 메시지가 비어있음")
@@ -86,7 +86,7 @@ def handle_chat():
                 response = loop.run_until_complete(
                     chatbot.get_response_async(user_message, callback_url)
                 )
-                print(f"[APP-CHAT] 비동기 처리 완료 - 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+                print(f"[APP-CHAT] 비동기 처리 완료")
                 return jsonify(response)
             else:
                 print(f"[APP-CHAT] 콜백 URL이 없음 - 동기 처리 시작")
@@ -100,7 +100,7 @@ def handle_chat():
                     "user_message": user_message,
                     "bot_response": response_text
                 }
-                print(f"[APP-CHAT] 동기 처리 완료 - 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
+                print(f"[APP-CHAT] 동기 처리 완료")
                 return jsonify(response)
         finally:
             loop.close()
