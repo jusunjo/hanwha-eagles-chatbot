@@ -169,7 +169,7 @@ class KakaoService:
                     "outputs": [
                         {
                             "simpleText": {
-                                "text": "response_text"
+                                "text": response_text
                             }
                         }
                     ]
