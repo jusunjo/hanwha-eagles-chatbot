@@ -53,9 +53,11 @@ def handle_chat():
 def handle_kakao():
     """카카오톡 챗봇 메시지 처리"""
     try:
+        print(f"[APP-KAKAO] ===== 카카오톡 엔드포인트 호출 시작 =====")
         data = request.get_json()
         
         if not data:
+            print(f"[APP-KAKAO] 요청 데이터 없음")
             return jsonify({
                 "version": "2.0",
                 "template": {
@@ -69,20 +71,27 @@ def handle_kakao():
                 }
             })
         
+        print(f"[APP-KAKAO] 요청 데이터 수신 완료")
+        
         # 카카오톡 형식인지 확인
         if 'userRequest' in data:
+            print(f"[APP-KAKAO] 카카오톡 형식 감지 - userRequest 존재")
             # 카카오톡 형식 - 기존 로직 사용
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
             try:
+                print(f"[APP-KAKAO] 비동기 처리 시작")
                 response = loop.run_until_complete(
                     kakao_service.process_kakao_request(data)
                 )
                 
+                print(f"[APP-KAKAO] 카카오 서비스 응답 수신 완료")
+                
                 # 필수 필드 확인
                 if 'version' not in response or 'template' not in response:
-                    print(f"[ERROR] 응답에 필수 필드가 누락됨")
+                    print(f"[APP-KAKAO-ERROR] 응답에 필수 필드가 누락됨")
+                    print(f"[APP-KAKAO-ERROR] 누락된 응답: {response}")
                     # 기본 형식으로 재생성
                     response = {
                         "version": "2.0",
@@ -96,16 +105,21 @@ def handle_kakao():
                             ]
                         }
                     }
+                    print(f"[APP-KAKAO] 응답 형식 자동 수정 완료")
                 
+                print(f"[APP-KAKAO] 최종 응답 반환 준비 완료")
                 return jsonify(response)
             finally:
                 loop.close()
+                print(f"[APP-KAKAO] 비동기 루프 정리 완료")
                 
         elif 'message' in data:
+            print(f"[APP-KAKAO] 간단한 메시지 형식 감지 - message 존재")
             # 간단한 메시지 형식 - 즉시 처리
             user_message = data.get('message', '')
             
             if not user_message:
+                print(f"[APP-KAKAO] 메시지 내용 없음")
                 return jsonify({
                     "version": "2.0",
                     "template": {
@@ -119,11 +133,14 @@ def handle_kakao():
                     }
                 })
             
+            print(f"[APP-KAKAO] 간단한 메시지 처리 시작: {user_message}")
+            
             # 챗봇 응답 생성
             response_text = chatbot.get_response(user_message)
+            print(f"[APP-KAKAO] 챗봇 응답 생성 완료: {response_text[:100]}...")
             
             # 카카오톡 형식으로 응답
-            return jsonify({
+            response = {
                 "version": "2.0",
                 "template": {
                     "outputs": [
@@ -134,9 +151,14 @@ def handle_kakao():
                         }
                     ]
                 }
-            })
+            }
+            
+            print(f"[APP-KAKAO] 간단한 메시지 응답 생성 완료")
+            return jsonify(response)
             
         else:
+            print(f"[APP-KAKAO-ERROR] 지원하지 않는 요청 형식")
+            print(f"[APP-KAKAO-ERROR] 요청 키: {list(data.keys())}")
             # 지원하지 않는 형식
             return jsonify({
                 "version": "2.0",
@@ -152,7 +174,9 @@ def handle_kakao():
             })
             
     except Exception as e:
-        print(f"Error processing Kakao message: {str(e)}")
+        print(f"[APP-KAKAO-ERROR] 카카오 메시지 처리 중 예외 발생: {str(e)}")
+        print(f"[APP-KAKAO-ERROR] 예외 타입: {type(e).__name__}")
+        print(f"[APP-KAKAO-ERROR] 예외 상세: {e}")
         return jsonify({
             "version": "2.0",
             "template": {
@@ -165,6 +189,8 @@ def handle_kakao():
                 ]
             }
         })
+    finally:
+        print(f"[APP-KAKAO] ===== 카카오톡 엔드포인트 처리 완료 =====")
 
 @app.route('/kakao-simple', methods=['POST'])
 def handle_kakao_simple():
