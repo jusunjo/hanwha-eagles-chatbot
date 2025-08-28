@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 from chatbot_service import HanwhaEaglesChatbot
@@ -8,7 +7,7 @@ from chatbot_service import HanwhaEaglesChatbot
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+# CORS(app)  # 임시로 주석 처리
 
 # 챗봇 인스턴스 생성
 chatbot = HanwhaEaglesChatbot()
