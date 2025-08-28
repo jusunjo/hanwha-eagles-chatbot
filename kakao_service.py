@@ -111,6 +111,7 @@ class KakaoService:
             # 에러 응답
             error_response = {
                 "version": "2.0",
+                "useCallback": True,
                 "template": {
                     "outputs": [
                         {
@@ -164,6 +165,7 @@ class KakaoService:
             print(f"[KAKAO-IMMEDIATE] 응답 구조 생성 시작")
             immediate_response = {
                 "version": "2.0",
+                "useCallback": True,
                 "template": {
                     "outputs": [
                         {
@@ -233,6 +235,7 @@ class KakaoService:
             # 4. 카카오톡 공식 스키마와 비교
             expected_schema = {
                 "version": "2.0",
+                "useCallback": True,
                 "template": {
                     "outputs": [
                         {
