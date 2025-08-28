@@ -200,9 +200,9 @@ class HanwhaEaglesChatbot:
         else:
             players_context = ""
 
-        print(f"base_prompt : {base_prompt}")
-        print(f"data_context : {data_context}")
-        print(f"schedule_context : {schedule_context}")
-        print(f"players_context : {players_context}")
+        # print(f"base_prompt : {base_prompt}")
+        # print(f"data_context : {data_context}")
+        # print(f"schedule_context : {schedule_context}")
+        # print(f"players_context : {players_context}")
         
         return base_prompt + data_context + schedule_context + players_context
