@@ -86,7 +86,8 @@ class KakaoService:
             
             if result:
                 print(f"[KAKAO-IMMEDIATE] 챗봇 답변 성공: {result[:100]}...")
-                response_text = result
+                # 줄바꿈 문자를 공백으로 변경 (카카오톡 호환성)
+                response_text = result.replace('\n', ' ')
             else:
                 print(f"[KAKAO-IMMEDIATE] 챗봇 처리 실패 - 빈 응답")
                 response_text = "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
