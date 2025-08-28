@@ -282,6 +282,7 @@ class KakaoService:
             # 에러 시에도 정확한 스키마로 응답
             error_response = {
                 "version": "2.0",
+                "useCallback": True,
                 "template": {
                     "outputs": [
                         {
