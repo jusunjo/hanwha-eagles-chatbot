@@ -80,12 +80,9 @@ def handle_kakao():
                     kakao_service.process_kakao_request(data)
                 )
                 
-                # 응답 형식 검증
-                print(f"[APP] 카카오 응답: {json.dumps(response, ensure_ascii=False, indent=2)}")
-                
                 # 필수 필드 확인
                 if 'version' not in response or 'template' not in response:
-                    print(f"[ERROR] 응답에 필수 필드가 누락됨: {response}")
+                    print(f"[ERROR] 응답에 필수 필드가 누락됨")
                     # 기본 형식으로 재생성
                     response = {
                         "version": "2.0",
