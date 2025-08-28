@@ -95,6 +95,7 @@ class HanwhaEaglesChatbot:
                 
                 # 3초 대기 (빠른 응답인지 확인)
                 try:
+                    print("[DEBUG] 3초 타임아웃 시작...")
                     # 3초 동안 처리가 완료되는지 기다림
                     result = await asyncio.wait_for(
                         self._process_message_async(user_message),
@@ -209,6 +210,12 @@ class HanwhaEaglesChatbot:
     async def _process_message_async(self, user_message: str) -> str:
         """사용자 메시지를 비동기로 처리"""
         try:
+            # 테스트용: 특정 키워드로 지연 시뮬레이션
+            if "느리게" in user_message or "slow" in user_message.lower():
+                print("[TEST] 느린 응답 시뮬레이션 시작 (5초 대기)")
+                await asyncio.sleep(5)  # 5초 대기
+                print("[TEST] 느린 응답 시뮬레이션 완료")
+            
             # 한화이글스 전체 데이터 가져오기 (날것의 JSON)
             current_data = self.data_manager.get_current_data()
             print(f"📊 현재 데이터 크기: {len(str(current_data))} characters")
