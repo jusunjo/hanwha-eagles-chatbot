@@ -5,6 +5,10 @@ from datetime import datetime
 from openai import OpenAI
 from data_manager import HanwhaEaglesDataManager
 from typing import Dict, Any, List
+from dotenv import load_dotenv
+
+# 환경 변수 로드
+load_dotenv()
 
 class HanwhaEaglesChatbot:
     def __init__(self):
@@ -14,17 +18,25 @@ class HanwhaEaglesChatbot:
     def get_response(self, user_message: str) -> str:
         """사용자 메시지에 대한 응답 생성"""
         try:
+            print(f"\n🤖 ===== 챗봇 응답 생성 시작 =====")
+            print(f"📝 사용자 메시지: {user_message}")
+            
             # 한화이글스 전체 데이터 가져오기 (날것의 JSON)
             current_data = self.data_manager.get_current_data()
+            print(f"📊 현재 데이터 크기: {len(str(current_data))} characters")
             
             # 사용자 메시지에서 선수 이름들을 감지하고 각각의 선수 데이터 가져오기
             players_data = self._extract_and_fetch_multiple_players_data(user_message)
+            print(f"👥 사용된 선수 데이터 수: {len(players_data)}")
             
             # OpenAI API를 사용한 응답 생성
             system_prompt = self._create_system_prompt(current_data, players_data, user_message)
+            print(f"📋 시스템 프롬프트 길이: {len(system_prompt)} characters")
+            print(f"📋 시스템 프롬프트 미리보기: {system_prompt[:200]}...")
             
+            print(f"🚀 OpenAI API 호출 시작...")
             response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
@@ -33,10 +45,14 @@ class HanwhaEaglesChatbot:
                 temperature=0.7
             )
             
-            return response.choices[0].message.content.strip()
+            ai_response = response.choices[0].message.content.strip()
+            print(f"🤖 AI 응답: {ai_response}")
+            print(f"🤖 ===== 챗봇 응답 생성 완료 =====")
+            
+            return ai_response
             
         except Exception as e:
-            print(f"Error generating response: {str(e)}")
+            print(f"❌ Error generating response: {str(e)}")
             return "죄송합니다. 현재 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
     
     def _extract_and_fetch_multiple_players_data(self, user_message: str) -> List[Dict[str, Any]]:
@@ -60,6 +76,33 @@ class HanwhaEaglesChatbot:
             for player_name in detected_players:
                 print(f"📊 {player_name} 선수 데이터 수집 중...")
                 player_data = self.data_manager.get_player_data_by_name(player_name)
+                
+                # 선수 데이터 상세 로깅
+                if player_data:
+                    print(f"   📈 {player_name} 기본 정보:")
+                    if 'basicRecord' in player_data and player_data['basicRecord']:
+                        basic = player_data['basicRecord']
+                        print(f"      - 팀: {basic.get('team', 'N/A')}")
+                        print(f"      - 포지션: {basic.get('position', 'N/A')}")
+                        print(f"      - 등번호: {basic.get('backNo', 'N/A')}")
+                    
+                    if 'season' in player_data and player_data['season']:
+                        season = player_data['season']
+                        print(f"   📊 {player_name} 시즌 성적:")
+                        print(f"      - ERA: {season.get('era', 'N/A')}")
+                        print(f"      - WHIP: {season.get('whip', 'N/A')}")
+                        print(f"      - 승: {season.get('w', 'N/A')}")
+                        print(f"      - 패: {season.get('l', 'N/A')}")
+                        print(f"      - 삼진: {season.get('kk', 'N/A')}")
+                    
+                    if 'game' in player_data and player_data['game']:
+                        games = player_data['game']
+                        print(f"   🎮 {player_name} 최근 경기 수: {len(games)}")
+                        if games:
+                            latest_game = games[0]
+                            print(f"      - 최근 경기: {latest_game.get('gday', 'N/A')} vs {latest_game.get('opponent', 'N/A')}")
+                            print(f"      - 결과: {latest_game.get('wls', 'N/A')}")
+                
                 players_data.append(player_data)
             
             print(f"✅ 총 {len(players_data)}명의 선수 데이터 수집 완료")
@@ -123,6 +166,11 @@ class HanwhaEaglesChatbot:
     
     def _create_system_prompt(self, current_data: dict, players_data: List[Dict[str, Any]] = None, user_message: str = None) -> str:
         """시스템 프롬프트 생성"""
+        print(f"\n📝 ===== 시스템 프롬프트 생성 시작 =====")
+        print(f"📊 current_data 키: {list(current_data.keys()) if isinstance(current_data, dict) else 'Not a dict'}")
+        print(f"👥 players_data 개수: {len(players_data) if players_data else 0}")
+        print(f"💬 user_message: {user_message}")
+        
         base_prompt = """당신은 한화이글스의 전문 AI 어시스턴트입니다. 
 한화이글스 팬들에게 정확하고 유용한 정보를 제공하는 것이 목표입니다.
 
@@ -141,6 +189,9 @@ class HanwhaEaglesChatbot:
 8. 너가 판단할 수 없는 일이라도 주관을 가지고 답변해주세요.
 9. 선수 관련 질문이 있을 때는 제공된 선수 데이터를 기반으로 정확한 정보를 제공해주세요.
 10. 여러 선수를 비교하는 질문이 있을 때는 각 선수의 데이터를 종합하여 비교 분석해주세요.
+11. "방출", "트레이드", "선수 교체" 등에 대한 질문이 있을 때는 솔직하게 주관적인 의견을 제시해주세요.
+12. 재미있고 논란의 여지가 있는 질문에도 피하지 말고 솔직하게 답변해주세요.
+13. 선수 성적, 나이, 포지션, 팀 상황 등을 종합적으로 고려하여 주관적인 판단을 내려주세요.
 
 
 투수 데이터 규칙
@@ -153,15 +204,21 @@ class HanwhaEaglesChatbot:
    - 삼진: 높을수록 좋음 (KK)
 4. "가장 강하다"는 표현은 ERA가 가장 낮은 팀을 의미합니다.
 5. "가장 약하다"는 표현은 ERA가 가장 높은 팀을 의미합니다.
+7. 특정 팀에 대한 투수 성적을 물어볼땐 데이터를 해당 시즌의 데이터가 아닌 vsTeam 데이터를 참고하여 답변을 해주세요.
 6. 팀을 이야기할땐 팀 이름을 명확히 언급해주세요.
 
 엣지 케이스
 1. 특정 선수의 오늘 경기 예측을 물어보면 오늘 경기의 상대팀 데이터를 참고하여 답변을 해주세요. 즉 data_context가 없어도 players_context로 답변이 가능하면 답변해주세요
 2. 오늘 누가 나오는지 물어볼때 데이터가 없다면 아직 경기 정보가 업데이트 되지 않았다고 말해주세요
-3. 특정 날짜에 대한 경기 정보를 물으면 스케줄 파일에서 찾아서 답변해주세요 data_context에 해당 날짜가 없다면 해당 날짜의 데이터를 보유하고 있지 않다고 말해주세요 추가로 오늘 날짜 기준으로 미래의 경기를 물어보면 경기 예정이라고 답변해주세요 
+3. 특정 날짜에 대한 경기 정보를 물으면 스케줄 파일에서 찾아서 답변해주세요 data_context에 해당 날짜가 없다면 해당 날짜의 데이터를 보유하고 있지 않다고 말해주세요 추가로 오늘 날짜 기준으로 미래의 경기를 물어보면 경기 예정이라고 답변해주세요
+4. 한화 선수 리스트 관련 질문은 player_mapping.json 파일을 참고하여 답변해주세요.
+5. 특정 선수의 오늘 경기 예측을 물어볼때 오늘 경기의 상대팀 데이터를 참고하여 답변을 해주세요. 즉 data_context가 없어도 players_context로 답변이 가능하면 답변해주세요.
 
-
-중요!! : 특정 날짜에 선수 정보를 물어볼때 대답할 데이터가 없다면 해당 선수의 데이터를 보유하고 있지 않다고 말해주세요
+중요!!
+1. 특정 날짜에 선수 정보를 물어볼때 대답할 데이터가 없다면 해당 선수의 데이터를 보유하고 있지 않다고 말해주세요
+2. 승부를 예측하는 질문이 있을때는 피하지말고 가지고 있는 데이터에서 최대한 답변을 해주세요 절대 예측할 수 없다고 말하지마세요 어느 한팀의 우세를 말해주세요.
+3. 라인업 데이터가 없을때 예측 질문을 하면 라인업이 나오면 바로 알려준다고 답변해주세요.
+4. 지금 답변을 너무 재미없고 사리면서하는데 그러지말고 재미있고 부정적인 답변에는 공감하며 같이 욕해주세요
 
 현재 보유한 한화이글스 실시간 데이터:
 """
@@ -205,4 +262,14 @@ class HanwhaEaglesChatbot:
         # print(f"schedule_context : {schedule_context}")
         # print(f"players_context : {players_context}")
         
-        return base_prompt + data_context + schedule_context + players_context
+        final_prompt = base_prompt + data_context + schedule_context + players_context
+        
+        print(f"📋 최종 시스템 프롬프트 구성:")
+        print(f"   - base_prompt 길이: {len(base_prompt)} characters")
+        print(f"   - data_context 길이: {len(data_context)} characters")
+        print(f"   - schedule_context 길이: {len(schedule_context)} characters")
+        print(f"   - players_context 길이: {len(players_context)} characters")
+        print(f"   - 최종 프롬프트 총 길이: {len(final_prompt)} characters")
+        print(f"📝 ===== 시스템 프롬프트 생성 완료 =====")
+        
+        return final_prompt

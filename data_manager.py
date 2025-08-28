@@ -55,14 +55,29 @@ class HanwhaEaglesDataManager:
                 away_code = today_game['awayTeamCode']
                 game_date = today.strftime('%Y%m%d')
                 
-                game_id = f"{game_date}{away_code}{home_code}02025"
-                api_url = f"https://api-gw.sports.naver.com/schedule/games/{game_id}/preview"
+                # 두 가지 조합 시도
+                combinations = [
+                    (f"{game_date}{home_code}{away_code}02025", "홈팀코드+원정팀코드"),
+                    (f"{game_date}{away_code}{home_code}02025", "원정팀코드+홈팀코드")
+                ]
                 
-                print(f"🏟️ 경기장: {today_game['stadium']}")
-                print(f"🕐 경기시간: {today_game['time']}")
-                print(f"🎯 생성된 경기 ID: {game_id}")
+                for game_id, description in combinations:
+                    api_url = f"https://api-gw.sports.naver.com/schedule/games/{game_id}/preview"
+                    print(f"🔄 {description} 조합 시도: {game_id}")
+                    
+                    # API 호출 테스트
+                    if self._test_api_url(api_url):
+                        print(f"✅ {description} 조합 성공!")
+                        print(f"🏟️ 경기장: {today_game['stadium']}")
+                        print(f"🕐 경기시간: {today_game['time']}")
+                        print(f"🎯 사용할 경기 ID: {game_id}")
+                        return api_url
+                    else:
+                        print(f"❌ {description} 조합 실패")
                 
-                return api_url
+                # 두 조합 모두 실패
+                print("❌ 모든 경기 ID 조합이 실패했습니다.")
+                return self._get_today_game_unavailable_url()
             else:
                 print(f"❌ 오늘({today_str}) 경기가 없습니다.")
                 return self._get_default_api_url()
@@ -71,6 +86,35 @@ class HanwhaEaglesDataManager:
             print(f"❌ 경기 ID 생성 중 오류: {e}")
             return self._get_default_api_url()
     
+    def _test_api_url(self, api_url: str) -> bool:
+        """API URL이 유효한지 테스트"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(api_url, headers=headers, timeout=5)
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    # 성공적인 응답인지 확인
+                    if data.get('success') and 'result' in data:
+                        return True
+                except:
+                    pass
+            
+            return False
+            
+        except Exception as e:
+            print(f"   - API 테스트 중 오류: {e}")
+            return False
+    
+    def _get_today_game_unavailable_url(self) -> str:
+        """오늘 경기를 아직 불러올 수 없을 때 사용할 URL"""
+        print("🔄 오늘 경기를 아직 불러올 수 없습니다. 기본 URL 사용")
+        return "https://api-gw.sports.naver.com/schedule/games/111/preview"
+        
     def _get_default_api_url(self) -> str:
         """기본 API URL 반환 (경기가 없을 때)"""
         print("🔄 기본 API URL 사용")
