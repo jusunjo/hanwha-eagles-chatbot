@@ -86,6 +86,57 @@ def handle_kakao():
             }
         })
 
+@app.route('/kakao-simple', methods=['POST'])
+def handle_kakao_simple():
+    """카카오톡 챗봇 간단한 메시지 처리 (테스트용)"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                "error": "요청 데이터가 없습니다."
+            })
+        
+        # 일반적인 message 형식 처리
+        user_message = data.get('message', '')
+        
+        if not user_message:
+            return jsonify({
+                "error": "메시지가 필요합니다."
+            })
+        
+        # 챗봇 응답 생성
+        response_text = chatbot.get_response(user_message)
+        
+        # 카카오톡 형식으로 응답
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": response_text
+                        }
+                    }
+                ]
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error processing Kakao simple message: {str(e)}")
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [
+                    {
+                        "simpleText": {
+                            "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                        }
+                    }
+                ]
+            }
+        })
+
 @app.route('/test', methods=['POST'])
 def test_message():
     """테스트용 엔드포인트 (간단한 형식)"""

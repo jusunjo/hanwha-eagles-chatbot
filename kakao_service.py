@@ -29,19 +29,110 @@ class KakaoService:
             print(f"[REQUEST] /kakao 엔드포인트 호출됨")
             print(f"[DEBUG] 받은 요청 데이터: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
             
-            # 사용자 정보 및 파라미터 추출
-            user_id = request_data['userRequest']['user']['id']
-            utterance = request_data['userRequest']['utterance']
-            callback_url = request_data['userRequest']['callbackUrl']
+            # 카카오톡 형식인지 확인
+            if 'userRequest' in request_data:
+                # 카카오톡 형식
+                user_id = request_data['userRequest']['user']['id']
+                utterance = request_data['userRequest']['utterance']
+                callback_url = request_data['userRequest']['callbackUrl']
+                
+                print(f"[DEBUG] 카카오톡 형식 - 사용자 ID: {user_id}")
+                print(f"[DEBUG] 카카오톡 형식 - 전체 발화문: {utterance}")
+                print(f"[DEBUG] 카카오톡 형식 - 콜백 URL: {callback_url}")
+                
+                return await self._process_kakao_format(utterance, callback_url)
+                
+            elif 'message' in request_data:
+                # 간단한 메시지 형식
+                user_message = request_data['message']
+                print(f"[DEBUG] 간단한 메시지 형식: {user_message}")
+                
+                return await self._process_simple_message(user_message)
+                
+            else:
+                # 지원하지 않는 형식
+                print(f"[ERROR] 지원하지 않는 요청 형식")
+                return {
+                    "version": "2.0",
+                    "template": {
+                        "outputs": [
+                            {
+                                "simpleText": {
+                                    "text": "지원하지 않는 요청 형식입니다."
+                                }
+                            }
+                        ]
+                    }
+                }
             
-            print(f"[DEBUG] 사용자 ID: {user_id}")
-            print(f"[DEBUG] 전체 발화문: {utterance}")
-            print(f"[DEBUG] 콜백 URL: {callback_url}")
+        except Exception as e:
+            print(f"[ERROR] 예외 발생: {str(e)}")
+            print(f"[ERROR] 예외 타입: {type(e).__name__}")
             
+            # 에러 응답
+            error_response = {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                            }
+                        }
+                    ]
+                }
+            }
+            print(f"[DEBUG] 에러 응답 데이터: {json.dumps(error_response, ensure_ascii=False, indent=2)}")
+            return error_response
+    
+    async def _process_simple_message(self, user_message: str) -> Dict[str, Any]:
+        """간단한 메시지 형식 처리"""
+        try:
+            # 챗봇 응답 생성
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self.chatbot.get_response, user_message)
+            
+            print(f"[DEBUG] 챗봇 답변: {result}")
+            
+            # 즉시 응답
+            immediate_response = {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": result
+                            }
+                        }
+                    ]
+                }
+            }
+            
+            print(f"[DEBUG] 즉시 응답 데이터: {json.dumps(immediate_response, ensure_ascii=False, indent=2)}")
+            return immediate_response
+            
+        except Exception as e:
+            print(f"[ERROR] 간단한 메시지 처리 중 오류: {str(e)}")
+            return {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "simpleText": {
+                                "text": "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                            }
+                        }
+                    ]
+                }
+            }
+    
+    async def _process_kakao_format(self, utterance: str, callback_url: str) -> Dict[str, Any]:
+        """카카오톡 형식 처리 (기존 로직)"""
+        try:
             # 백그라운드에서 실제 챗봇 작업을 처리하는 함수
             async def process_chatbot_background():
                 try:
-                    print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 사용자: {user_id}, 질문: {utterance}")
+                    print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 질문: {utterance}")
                     
                     # 챗봇 서비스 호출 (동기 함수를 비동기로 실행)
                     loop = asyncio.get_event_loop()
@@ -159,54 +250,21 @@ class KakaoService:
                 
                 print(f"[DEBUG] 대기 메시지 응답: {json.dumps(waiting_response, ensure_ascii=False, indent=2)}")
                 return waiting_response
-            
+                
         except Exception as e:
-            print(f"[ERROR] 예외 발생: {str(e)}")
-            print(f"[ERROR] 예외 타입: {type(e).__name__}")
-            
-            # 에러 발생 시 콜백으로 에러 메시지 전송
-            try:
-                callback_url = request_data.get('userRequest', {}).get('callbackUrl')
-                if callback_url:
-                    error_callback_response = {
-                        "version": "2.0",
-                        "useCallback": True,
-                        "template": {
-                            "outputs": [
-                                {
-                                    "simpleText": {
-                                        "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                    
-                    async with httpx.AsyncClient(timeout=60.0) as client:
-                        await client.post(
-                            callback_url,
-                            json=error_callback_response,
-                            headers={"Content-Type": "application/json"}
-                        )
-                        print(f"[CALLBACK] 에러 콜백 전송 완료")
-            except Exception as callback_error:
-                print(f"[CALLBACK ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
-            
-            # 에러 응답
-            error_response = {
+            print(f"[ERROR] 카카오톡 형식 처리 중 오류: {str(e)}")
+            return {
                 "version": "2.0",
                 "template": {
                     "outputs": [
                         {
                             "simpleText": {
-                                "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
+                                "text": "AI 처리 중 오류가 발생했어요. 다시 시도해주세요."
                             }
                         }
                     ]
                 }
             }
-            print(f"[DEBUG] 에러 응답 데이터: {json.dumps(error_response, ensure_ascii=False, indent=2)}")
-            return error_response
 
 
 # Create a singleton instance
