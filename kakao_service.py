@@ -38,6 +38,9 @@ class KakaoService:
             user_request = request_data['userRequest']
             print(f"[KAKAO] userRequest 키: {list(user_request.keys())}")
 
+
+            print(f"[KAKAO] userRequest 전체 내용: {user_request}")
+
             # callbackUrl 확인 및 할당
             callback_url = None
             if 'callbackUrl' in user_request:
