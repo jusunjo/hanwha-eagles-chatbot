@@ -160,6 +160,48 @@ class HanwhaEaglesChatbot:
             print(f"❌ 스케줄 컨텍스트 생성 오류: {e}")
             return "\n\n경기 스케줄 정보를 가져올 수 없습니다."
     
+    def _get_full_schedule_context(self) -> str:
+        """전체 경기 스케줄 정보를 가져와서 컨텍스트로 제공"""
+        try:
+            schedule_file_path = "game_schedule.json"
+            if os.path.exists(schedule_file_path):
+                with open(schedule_file_path, 'r', encoding='utf-8') as f:
+                    schedule_data = json.load(f)
+                
+                # 현재 날짜 기준으로 다음 경기 찾기
+                from datetime import datetime
+                current_date = datetime.now()
+                
+                # 오늘 날짜를 MM.DD 형식으로 변환
+                today_str = current_date.strftime("%m.%d")
+                
+                # 스케줄에서 오늘 이후의 첫 번째 경기 찾기
+                next_game = None
+                for game in schedule_data.get('schedule', []):
+                    game_date = game.get('date', '')
+                    if '(' in game_date:
+                        date_part = game_date.split('(')[0]
+                        # 날짜 비교를 위해 MM.DD 형식으로 변환
+                        try:
+                            month, day = date_part.split('.')
+                            game_date_obj = datetime(2025, int(month), int(day))
+                            if game_date_obj > current_date:
+                                next_game = game
+                                break
+                        except:
+                            continue
+                
+                if next_game:
+                    return f"\n\n다음 경기 정보:\n{json.dumps(next_game, ensure_ascii=False, indent=2)}"
+                else:
+                    return "\n\n다음 경기 정보를 찾을 수 없습니다."
+            else:
+                return "\n\n경기 스케줄 파일을 찾을 수 없습니다."
+                
+        except Exception as e:
+            print(f"❌ 전체 스케줄 컨텍스트 생성 오류: {e}")
+            return "\n\n전체 경기 스케줄 정보를 가져올 수 없습니다."
+    
     def _create_system_prompt(self, current_data: dict, players_data: List[Dict[str, Any]] = None, user_message: str = None) -> str:
         """시스템 프롬프트 생성"""
         print(f"\n📝 ===== 시스템 프롬프트 생성 시작 =====")
@@ -189,6 +231,7 @@ class HanwhaEaglesChatbot:
 11. "방출", "트레이드", "선수 교체" 등에 대한 질문이 있을 때는 솔직하게 주관적인 의견을 제시해주세요.
 12. 재미있고 논란의 여지가 있는 질문에도 피하지 말고 솔직하게 답변해주세요.
 13. 선수 성적, 나이, 포지션, 팀 상황 등을 종합적으로 고려하여 주관적인 판단을 내려주세요.
+14. "다음 경기", "다음 경기 언제", "다음 경기 일정" 등의 질문이 있을 때는 제공된 경기 스케줄 데이터를 참고하여 정확한 정보를 제공해주세요.
 
 
 투수 데이터 규칙
@@ -234,6 +277,9 @@ class HanwhaEaglesChatbot:
         # 스케줄 파일 정보 추가 (특정 날짜 질문 대응용)
         schedule_context = self._get_schedule_context(user_message)
         
+        # 전체 경기 스케줄 정보 추가 (다음 경기 질문 대응용)
+        full_schedule_context = self._get_full_schedule_context()
+        
         # 여러 선수 데이터가 있으면 추가
         if players_data and len(players_data) > 0:
             if len(players_data) == 1:
@@ -257,14 +303,16 @@ class HanwhaEaglesChatbot:
         # print(f"base_prompt : {base_prompt}")
         # print(f"data_context : {data_context}")
         # print(f"schedule_context : {schedule_context}")
+        # print(f"full_schedule_context : {full_schedule_context}")
         # print(f"players_context : {players_context}")
         
-        final_prompt = base_prompt + data_context + schedule_context + players_context
+        final_prompt = base_prompt + data_context + schedule_context + full_schedule_context + players_context
         
         print(f"📋 최종 시스템 프롬프트 구성:")
         print(f"   - base_prompt 길이: {len(base_prompt)} characters")
         print(f"   - data_context 길이: {len(data_context)} characters")
         print(f"   - schedule_context 길이: {len(schedule_context)} characters")
+        print(f"   - full_schedule_context 길이: {len(full_schedule_context)} characters")
         print(f"   - players_context 길이: {len(players_context)} characters")
         print(f"   - 최종 프롬프트 총 길이: {len(final_prompt)} characters")
         print(f"📝 ===== 시스템 프롬프트 생성 완료 =====")
