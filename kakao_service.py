@@ -50,6 +50,7 @@ class KakaoService:
             async def process_chatbot_background():
                 try:
                     print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 사용자: {user_id}, 질문: {question}")
+                    print(f"[BACKGROUND] 콜백 URL: {callback_url}")
                     
                     # 챗봇 서비스 호출
                     loop = asyncio.get_event_loop()
@@ -77,6 +78,9 @@ class KakaoService:
                         }
                     }
                     
+                    print(f"[BACKGROUND] 콜백 전송 시작 - URL: {callback_url}")
+                    print(f"[BACKGROUND] 콜백 데이터: {json.dumps(final_callback_response, ensure_ascii=False, indent=2)}")
+                    
                     async with httpx.AsyncClient(timeout=60.0) as client:
                         response = await client.post(
                             callback_url,
@@ -84,9 +88,11 @@ class KakaoService:
                             headers={"Content-Type": "application/json"}
                         )
                         print(f"[BACKGROUND] 최종 결과 콜백 전송 완료 - 상태코드: {response.status_code}")
+                        print(f"[BACKGROUND] 콜백 응답: {response.text}")
                         
                 except Exception as e:
                     print(f"[BACKGROUND ERROR] 백그라운드 처리 중 오류: {str(e)}")
+                    print(f"[BACKGROUND ERROR] 오류 타입: {type(e).__name__}")
                     
                     # 에러 발생 시에도 콜백으로 에러 메시지 전송
                     try:
@@ -104,6 +110,8 @@ class KakaoService:
                             }
                         }
                         
+                        print(f"[BACKGROUND] 에러 콜백 전송 시작 - URL: {callback_url}")
+                        
                         async with httpx.AsyncClient(timeout=60.0) as client:
                             await client.post(
                                 callback_url,
@@ -113,8 +121,10 @@ class KakaoService:
                             print(f"[BACKGROUND] 에러 콜백 전송 완료")
                     except Exception as callback_error:
                         print(f"[BACKGROUND ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
+                        print(f"[BACKGROUND ERROR] 콜백 에러 타입: {type(callback_error).__name__}")
             
             # 백그라운드에서 챗봇 작업 시작
+            print(f"[BACKGROUND] 백그라운드 태스크 시작 - 콜백 URL: {callback_url}")
             background_task = asyncio.create_task(process_chatbot_background())
             
             # 4초 대기 (빠른 응답인지 확인)
@@ -151,12 +161,57 @@ class KakaoService:
                     }
                 }
                 
+                # 콜백 URL이 있으면 콜백도 전송
+                if callback_url:
+                    print(f"[IMMEDIATE] 콜백 URL이 있으므로 콜백도 전송 - URL: {callback_url}")
+                    try:
+                        callback_response = {
+                            "version": "2.0",
+                            "useCallback": True,
+                            "template": {
+                                "outputs": [
+                                    {
+                                        "simpleText": {
+                                            "text": response_text
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                        
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            response = await client.post(
+                                callback_url,
+                                json=callback_response,
+                                headers={"Content-Type": "application/json"}
+                            )
+                            print(f"[IMMEDIATE] 콜백 전송 완료 - 상태코드: {response.status_code}")
+                    except Exception as e:
+                        print(f"[IMMEDIATE ERROR] 콜백 전송 실패: {str(e)}")
+                
                 print(f"[DEBUG] 즉시 응답 데이터: {json.dumps(immediate_response, ensure_ascii=False, indent=2)}")
                 return immediate_response
                 
             except asyncio.TimeoutError:
                 # 4초가 지나서 타임아웃된 경우
                 print("[INFO] 4초 타임아웃 - 백그라운드 처리로 전환")
+                
+                # 콜백 URL이 없으면 에러 응답
+                if not callback_url:
+                    print("[ERROR] 콜백 URL이 없어서 백그라운드 처리 불가")
+                    error_response = {
+                        "version": "2.0",
+                        "template": {
+                            "outputs": [
+                                {
+                                    "simpleText": {
+                                        "text": "처리 시간이 오래 걸려서 콜백 URL이 필요합니다."
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                    return error_response
                 
                 # 즉시 "기다리는 메시지" 응답
                 waiting_response = {
@@ -174,6 +229,7 @@ class KakaoService:
                 }
                 
                 print(f"[DEBUG] 대기 메시지 응답: {json.dumps(waiting_response, ensure_ascii=False, indent=2)}")
+                print(f"[DEBUG] 백그라운드 태스크가 계속 실행 중 - 콜백 URL: {callback_url}")
                 return waiting_response
             
         except Exception as e:
