@@ -206,7 +206,7 @@ class KakaoService:
                 loop = asyncio.get_event_loop()
                 result = await asyncio.wait_for(
                     loop.run_in_executor(None, self.chatbot.get_response, question),
-                    timeout=4.0
+                    timeout=3.0
                 )
                 
                 # 4초 이내에 결과가 나온 경우
