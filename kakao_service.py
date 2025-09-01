@@ -48,6 +48,9 @@ class KakaoService:
             
             # 백그라운드에서 실제 챗봇 작업을 처리하는 함수
             async def process_chatbot_background():
+                print(f"[BACKGROUND] ===== 백그라운드 함수 진입 =====")
+                print(f"[BACKGROUND] 함수 시작 시간: {asyncio.get_event_loop().time()}")
+                
                 try:
                     print(f"[BACKGROUND] ===== 백그라운드 챗봇 처리 시작 =====")
                     print(f"[BACKGROUND] 사용자: {user_id}")
@@ -142,12 +145,27 @@ class KakaoService:
                         print(f"[BACKGROUND ERROR] 콜백 에러 타입: {type(callback_error).__name__}")
                         import traceback
                         traceback.print_exc()
+                
+                print(f"[BACKGROUND] ===== 백그라운드 함수 종료 =====")
+                print(f"[BACKGROUND] 함수 종료 시간: {asyncio.get_event_loop().time()}")
             
             # 백그라운드에서 챗봇 작업 시작
             print(f"[BACKGROUND] ===== 백그라운드 태스크 시작 =====")
             print(f"[BACKGROUND] 콜백 URL: {callback_url}")
             background_task = asyncio.create_task(process_chatbot_background())
             print(f"[BACKGROUND] 백그라운드 태스크 생성 완료")
+            print(f"[BACKGROUND] 태스크 객체: {background_task}")
+            print(f"[BACKGROUND] 태스크 상태: {background_task.done()}")
+            
+            # 백그라운드 태스크가 실제로 실행되도록 보장
+            print(f"[BACKGROUND] 백그라운드 태스크 실행 보장 시작")
+            try:
+                # 태스크가 시작되도록 약간의 지연
+                await asyncio.sleep(0.1)
+                print(f"[BACKGROUND] 백그라운드 태스크 실행 보장 완료")
+                print(f"[BACKGROUND] 태스크 상태: {background_task.done()}")
+            except Exception as e:
+                print(f"[BACKGROUND ERROR] 태스크 실행 보장 중 오류: {str(e)}")
             
             # 4초 대기 (빠른 응답인지 확인)
             try:
@@ -258,6 +276,16 @@ class KakaoService:
                 print(f"[TIMEOUT] 백그라운드 태스크가 계속 실행 중")
                 print(f"[TIMEOUT] 콜백 URL: {callback_url}")
                 print(f"[TIMEOUT] 백그라운드 태스크 상태: {background_task.done()}")
+                print(f"[TIMEOUT] 백그라운드 태스크 객체: {background_task}")
+                
+                # 백그라운드 태스크가 실제로 실행되고 있는지 확인
+                if not background_task.done():
+                    print(f"[TIMEOUT] 백그라운드 태스크가 실행 중입니다")
+                    print(f"[TIMEOUT] 태스크가 완료될 때까지 기다리지 않고 즉시 응답 반환")
+                else:
+                    print(f"[TIMEOUT WARNING] 백그라운드 태스크가 이미 완료되었습니다!")
+                    print(f"[TIMEOUT WARNING] 이는 예상되지 않은 상황입니다")
+                
                 return waiting_response
             
         except Exception as e:
