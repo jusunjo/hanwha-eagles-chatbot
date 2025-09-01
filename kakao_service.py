@@ -94,13 +94,38 @@ class KakaoService:
                         }
                     }
                     
-                    async with httpx.AsyncClient(timeout=60.0) as client:
-                        response = await client.post(
-                            callback_url,
-                            json=final_callback_response,
-                            headers={"Content-Type": "application/json"}
-                        )
-                        print(f"[BACKGROUND] 최종 결과 콜백 전송 완료 - 상태코드: {response.status_code}")
+                    print(f"[BACKGROUND] ===== 콜백 API 호출 시작 =====")
+                    print(f"[BACKGROUND] 콜백 URL: {callback_url}")
+                    print(f"[BACKGROUND] 콜백 데이터: {json.dumps(final_callback_response, ensure_ascii=False, indent=2)}")
+                    
+                    try:
+                        async with httpx.AsyncClient(timeout=60.0) as client:
+                            print(f"[BACKGROUND] HTTP 클라이언트 생성 완료")
+                            print(f"[BACKGROUND] POST 요청 전송 중...")
+                            
+                            response = await client.post(
+                                callback_url,
+                                json=final_callback_response,
+                                headers={"Content-Type": "application/json"}
+                            )
+                            
+                            print(f"[BACKGROUND] ===== 콜백 API 호출 완료 =====")
+                            print(f"[BACKGROUND] 상태코드: {response.status_code}")
+                            print(f"[BACKGROUND] 응답 헤더: {dict(response.headers)}")
+                            print(f"[BACKGROUND] 응답 내용: {response.text}")
+                            
+                            if response.status_code == 200:
+                                print(f"[BACKGROUND] ✅ 콜백 API 호출 성공")
+                            else:
+                                print(f"[BACKGROUND] ❌ 콜백 API 호출 실패 - 상태코드: {response.status_code}")
+                                
+                    except httpx.TimeoutException:
+                        print(f"[BACKGROUND] ❌ 콜백 API 호출 타임아웃 (60초)")
+                    except httpx.RequestError as e:
+                        print(f"[BACKGROUND] ❌ 콜백 API 호출 네트워크 오류: {e}")
+                    except Exception as e:
+                        print(f"[BACKGROUND] ❌ 콜백 API 호출 예외: {str(e)}")
+                        print(f"[BACKGROUND] 예외 타입: {type(e).__name__}")
                         
                 except Exception as e:
                     print(f"[BACKGROUND ERROR] 백그라운드 처리 중 오류: {str(e)}")
@@ -121,15 +146,36 @@ class KakaoService:
                             }
                         }
                         
+                        print(f"[BACKGROUND] ===== 에러 콜백 API 호출 시작 =====")
+                        print(f"[BACKGROUND] 에러 콜백 URL: {callback_url}")
+                        print(f"[BACKGROUND] 에러 콜백 데이터: {json.dumps(error_callback_response, ensure_ascii=False, indent=2)}")
+                        
                         async with httpx.AsyncClient(timeout=60.0) as client:
-                            await client.post(
+                            print(f"[BACKGROUND] 에러 콜백 HTTP 클라이언트 생성")
+                            print(f"[BACKGROUND] 에러 콜백 POST 요청 전송 중...")
+                            
+                            response = await client.post(
                                 callback_url,
                                 json=error_callback_response,
                                 headers={"Content-Type": "application/json"}
                             )
-                            print(f"[BACKGROUND] 에러 콜백 전송 완료")
+                            
+                            print(f"[BACKGROUND] ===== 에러 콜백 API 호출 완료 =====")
+                            print(f"[BACKGROUND] 에러 콜백 상태코드: {response.status_code}")
+                            print(f"[BACKGROUND] 에러 콜백 응답: {response.text}")
+                            
+                            if response.status_code == 200:
+                                print(f"[BACKGROUND] ✅ 에러 콜백 API 호출 성공")
+                            else:
+                                print(f"[BACKGROUND] ❌ 에러 콜백 API 호출 실패 - 상태코드: {response.status_code}")
+                                
+                    except httpx.TimeoutException:
+                        print(f"[BACKGROUND] ❌ 에러 콜백 API 호출 타임아웃 (60초)")
+                    except httpx.RequestError as e:
+                        print(f"[BACKGROUND] ❌ 에러 콜백 API 호출 네트워크 오류: {e}")
                     except Exception as callback_error:
-                        print(f"[BACKGROUND ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
+                        print(f"[BACKGROUND] ❌ 에러 콜백 API 호출 예외: {str(callback_error)}")
+                        print(f"[BACKGROUND] 에러 콜백 예외 타입: {type(callback_error).__name__}")
             
             # 백그라운드에서 챗봇 작업 시작
             background_task = asyncio.create_task(process_chatbot_background())
@@ -215,15 +261,36 @@ class KakaoService:
                         }
                     }
                     
+                    print(f"[CALLBACK] ===== 메인 에러 콜백 API 호출 시작 =====")
+                    print(f"[CALLBACK] 에러 콜백 URL: {callback_url}")
+                    print(f"[CALLBACK] 에러 콜백 데이터: {json.dumps(error_callback_response, ensure_ascii=False, indent=2)}")
+                    
                     async with httpx.AsyncClient(timeout=60.0) as client:
-                        await client.post(
+                        print(f"[CALLBACK] 메인 에러 콜백 HTTP 클라이언트 생성")
+                        print(f"[CALLBACK] 메인 에러 콜백 POST 요청 전송 중...")
+                        
+                        response = await client.post(
                             callback_url,
                             json=error_callback_response,
                             headers={"Content-Type": "application/json"}
                         )
-                        print(f"[CALLBACK] 에러 콜백 전송 완료")
+                        
+                        print(f"[CALLBACK] ===== 메인 에러 콜백 API 호출 완료 =====")
+                        print(f"[CALLBACK] 메인 에러 콜백 상태코드: {response.status_code}")
+                        print(f"[CALLBACK] 메인 에러 콜백 응답: {response.text}")
+                        
+                        if response.status_code == 200:
+                            print(f"[CALLBACK] ✅ 메인 에러 콜백 API 호출 성공")
+                        else:
+                            print(f"[CALLBACK] ❌ 메인 에러 콜백 API 호출 실패 - 상태코드: {response.status_code}")
+                            
+            except httpx.TimeoutException:
+                print(f"[CALLBACK] ❌ 메인 에러 콜백 API 호출 타임아웃 (60초)")
+            except httpx.RequestError as e:
+                print(f"[CALLBACK] ❌ 메인 에러 콜백 API 호출 네트워크 오류: {e}")
             except Exception as callback_error:
-                print(f"[CALLBACK ERROR] 에러 콜백 전송 실패: {str(callback_error)}")
+                print(f"[CALLBACK] ❌ 메인 에러 콜백 API 호출 예외: {str(callback_error)}")
+                print(f"[CALLBACK] 메인 에러 콜백 예외 타입: {type(callback_error).__name__}")
             
             # 에러 응답
             error_response = {
