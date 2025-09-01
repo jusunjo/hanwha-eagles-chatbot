@@ -49,17 +49,12 @@ class KakaoService:
             user_id = user_request['user']['id']
             utterance = user_request['utterance']
             
-            # callbackUrl 추출
-            callback_url = user_request.get('callbackUrl', None)
-            print(f"[KAKAO] 콜백 URL: {callback_url}")
-            
             print(f"[KAKAO] 사용자 정보:")
             print(f"[KAKAO] - 사용자 ID: {user_id}")
             print(f"[KAKAO] - 사용자 ID 타입: {type(user_id)}")
             print(f"[KAKAO] - 전체 발화문: {utterance}")
             print(f"[KAKAO] - 발화문 타입: {type(utterance)}")
             print(f"[KAKAO] - 발화문 길이: {len(utterance) if utterance else 0}")
-            print(f"[KAKAO] - 콜백 URL: {callback_url}")
             
             # action.params.message에서 실제 질문 추출
             print(f"[KAKAO] action 파라미터 분석:")
@@ -93,13 +88,9 @@ class KakaoService:
             print(f"[KAKAO] - 질문 타입: {type(question)}")
             print(f"[KAKAO] - 질문 길이: {len(question) if question else 0}")
             
-            # 콜백 URL이 있는 경우 비동기 처리, 없는 경우 즉시 응답 처리
-            if callback_url:
-                print(f"[KAKAO] 콜백 URL이 감지됨 - 비동기 처리로 전환")
-                response = await self._process_async_response(question, callback_url)
-            else:
-                print(f"[KAKAO] 콜백 URL이 없음 - 즉시 응답 처리로 전환")
-                response = await self._process_immediate_response(question)
+            # 즉시 응답 처리
+            print(f"[KAKAO] 즉시 응답 처리로 전환")
+            response = await self._process_immediate_response(question)
             
             print(f"[KAKAO] 응답 생성 완료:")
             print(f"[KAKAO] - 응답 타입: {type(response)}")
@@ -135,45 +126,6 @@ class KakaoService:
             print(f"[KAKAO] ===== 카카오톡 챗봇 요청 실패 =====")
             return error_response
     
-    async def _process_async_response(self, question: str, callback_url: str) -> Dict[str, Any]:
-        """비동기 응답 처리 (콜백 지원)"""
-        try:
-            print(f"[KAKAO-ASYNC] ===== 비동기 응답 처리 시작 =====")
-            print(f"[KAKAO-ASYNC] 입력 질문: {question}")
-            print(f"[KAKAO-ASYNC] 콜백 URL: {callback_url}")
-            
-            # 챗봇 서비스의 비동기 메서드 호출
-            print(f"[KAKAO-ASYNC] 챗봇 서비스 비동기 호출 시작")
-            response = await self.chatbot.get_response_async(question, callback_url)
-            
-            print(f"[KAKAO-ASYNC] 챗봇 서비스 응답 수신 완료")
-            print(f"[KAKAO-ASYNC] 응답 타입: {type(response)}")
-            print(f"[KAKAO-ASYNC] 응답 키: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}")
-            
-            return response
-            
-        except Exception as e:
-            print(f"[KAKAO-ASYNC ERROR] 예외 발생: {str(e)}")
-            print(f"[KAKAO-ASYNC ERROR] 예외 타입: {type(e).__name__}")
-            
-            # 에러 응답
-            error_response = {
-                "version": "2.0",
-                "useCallback": True,
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": "요청 처리 중 오류가 발생했어요. 다시 시도해주세요."
-                            }
-                        }
-                    ]
-                }
-            }
-            
-            print(f"[KAKAO-ASYNC ERROR] 에러 응답 생성 완료")
-            return error_response
-
     async def _process_immediate_response(self, question: str) -> Dict[str, Any]:
         """즉시 응답 처리"""
         try:
