@@ -117,162 +117,23 @@ def handle_chat():
         })
 
 @app.route('/kakao', methods=['POST'])
-def handle_kakao():
-    """카카오톡 챗봇 메시지 처리"""
+def kakao_handler():
+    """카카오톡 챗봇을 위한 엔드포인트 (콜백 방식)."""
     try:
-        print(f"[APP-KAKAO] ===== 카카오톡 엔드포인트 호출 시작 =====")
-        data = request.get_json()
+        req = request.get_json()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        if not data:
-            print(f"[APP-KAKAO] 요청 데이터 없음")
-            return jsonify({
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": "요청 데이터가 없습니다."
-                            }
-                        }
-                    ]
-                }
-            })
-        
-        print(f"[APP-KAKAO] 요청 데이터 수신 완료")
-        
-        # 카카오톡 형식인지 확인
-        if 'userRequest' in data:
-            print(f"[APP-KAKAO] 카카오톡 형식 감지 - userRequest 존재")
-            # 카카오톡 형식 - 기존 로직 사용
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            try:
-                print(f"[APP-KAKAO] 비동기 처리 시작")
-                response = loop.run_until_complete(
-                    kakao_service.process_kakao_request(data)
-                )
-                
-                print(f"[APP-KAKAO] 카카오 서비스 응답 수신 완료")
-                
-                # 응답 스키마 엄격 검증
-                print(f"[APP-KAKAO] 응답 스키마 검증 시작")
-                
-                # 1단계: 기본 구조 검증
-                if not isinstance(response, dict):
-                    print(f"[APP-KAKAO-ERROR] 응답이 딕셔너리가 아님: {type(response)}")
-                    response = _create_fallback_response("응답 형식 오류")
-                elif 'version' not in response:
-                    print(f"[APP-KAKAO-ERROR] version 필드 누락")
-                    response = _create_fallback_response("응답 형식 오류")
-                elif 'template' not in response:
-                    print(f"[APP-KAKAO-ERROR] template 필드 누락")
-                    response = _create_fallback_response("응답 형식 오류")
-                elif not isinstance(response['template'], dict):
-                    print(f"[APP-KAKAO-ERROR] template이 딕셔너리가 아님: {type(response['template'])}")
-                    response = _create_fallback_response("응답 형식 오류")
-                elif 'outputs' not in response['template']:
-                    print(f"[APP-KAKAO-ERROR] outputs 필드 누락")
-                    response = _create_fallback_response("응답 형식 오류")
-                elif not isinstance(response['template']['outputs'], list):
-                    print(f"[APP-KAKAO-ERROR] outputs가 리스트가 아님: {type(response['template']['outputs'])}")
-                    response = _create_fallback_response("응답 형식 오류")
-                elif len(response['template']['outputs']) == 0:
-                    print(f"[APP-KAKAO-ERROR] outputs가 비어있음")
-                    response = _create_fallback_response("응답 형식 오류")
-                else:
-                    # 2단계: outputs 내용 검증
-                    first_output = response['template']['outputs'][0]
-                    if not isinstance(first_output, dict):
-                        print(f"[APP-KAKAO-ERROR] 첫 번째 output이 딕셔너리가 아님: {type(first_output)}")
-                        response = _create_fallback_response("응답 형식 오류")
-                    elif 'simpleText' not in first_output:
-                        print(f"[APP-KAKAO-ERROR] simpleText 필드 누락")
-                        response = _create_fallback_response("응답 형식 오류")
-                    elif not isinstance(first_output['simpleText'], dict):
-                        print(f"[APP-KAKAO-ERROR] simpleText가 딕셔너리가 아님: {type(first_output['simpleText'])}")
-                        response = _create_fallback_response("응답 형식 오류")
-                    elif 'text' not in first_output['simpleText']:
-                        print(f"[APP-KAKAO-ERROR] text 필드 누락")
-                        response = _create_fallback_response("응답 형식 오류")
-                    elif not isinstance(first_output['simpleText']['text'], str):
-                        print(f"[APP-KAKAO-ERROR] text가 문자열이 아님: {type(first_output['simpleText']['text'])}")
-                        response = _create_fallback_response("응답 형식 오류")
-                    else:
-                        print(f"[APP-KAKAO] 응답 스키마 검증 성공")
-                        print(f"[APP-KAKAO] - version: {response.get('version')}")
-                        print(f"[APP-KAKAO] - text 길이: {len(first_output['simpleText']['text'])}")
-                
-                print(f"[APP-KAKAO] 최종 응답 반환 준비 완료")
-                return jsonify(response)
-            finally:
-                loop.close()
-                print(f"[APP-KAKAO] 비동기 루프 정리 완료")
-                
-        elif 'message' in data:
-            print(f"[APP-KAKAO] 간단한 메시지 형식 감지 - message 존재")
-            # 간단한 메시지 형식 - 즉시 처리
-            user_message = data.get('message', '')
-            
-            if not user_message:
-                print(f"[APP-KAKAO] 메시지 내용 없음")
-                return jsonify({
-                    "version": "2.0",
-                    "template": {
-                        "outputs": [
-                            {
-                                "simpleText": {
-                                    "text": "메시지가 필요합니다."
-                                }
-                            }
-                        ]
-                    }
-                })
-            
-            print(f"[APP-KAKAO] 간단한 메시지 처리 시작: {user_message}")
-            
-            # 챗봇 응답 생성
-            response_text = chatbot.get_response(user_message)
-            print(f"[APP-KAKAO] 챗봇 응답 생성 완료: {response_text[:100]}...")
-            
-            # 카카오톡 형식으로 응답
-            response = {
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": response_text
-                            }
-                        }
-                    ]
-                }
-            }
-            
-            print(f"[APP-KAKAO] 간단한 메시지 응답 생성 완료")
+        try:
+            response = loop.run_until_complete(
+                kakao_service.process_kakao_request(req)
+            )
             return jsonify(response)
-            
-        else:
-            print(f"[APP-KAKAO-ERROR] 지원하지 않는 요청 형식")
-            print(f"[APP-KAKAO-ERROR] 요청 키: {list(data.keys())}")
-            # 지원하지 않는 형식
-            return jsonify({
-                "version": "2.0",
-                "template": {
-                    "outputs": [
-                        {
-                            "simpleText": {
-                                "text": "지원하지 않는 요청 형식입니다."
-                            }
-                        }
-                    ]
-                }
-            })
+        finally:
+            loop.close()
             
     except Exception as e:
-        print(f"[APP-KAKAO-ERROR] 카카오 메시지 처리 중 예외 발생: {str(e)}")
-        print(f"[APP-KAKAO-ERROR] 예외 타입: {type(e).__name__}")
-        print(f"[APP-KAKAO-ERROR] 예외 상세: {e}")
+        print(f"[ERROR] Kakao handler error: {str(e)}")
         return jsonify({
             "version": "2.0",
             "template": {
