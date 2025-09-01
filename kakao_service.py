@@ -4,6 +4,7 @@ Kakao service for handling Kakao chatbot requests with Hanwha Eagles data.
 
 import json
 import asyncio
+import httpx
 from typing import Dict, Any
 from chatbot_service import HanwhaEaglesChatbot
 
@@ -102,7 +103,7 @@ class KakaoService:
             
             # 즉시 응답 처리
             print(f"[KAKAO] 즉시 응답 처리로 전환")
-            response = await self._process_immediate_response(question)
+            response = await self._process_immediate_response(question, callback_url)
             
             print(f"[KAKAO] 응답 생성 완료:")
             print(f"[KAKAO] - 응답 타입: {type(response)}")
@@ -138,11 +139,12 @@ class KakaoService:
             print(f"[KAKAO] ===== 카카오톡 챗봇 요청 실패 =====")
             return error_response
     
-    async def _process_immediate_response(self, question: str) -> Dict[str, Any]:
+    async def _process_immediate_response(self, question: str, callback_url: str = None) -> Dict[str, Any]:
         """즉시 응답 처리"""
         try:
             print(f"[KAKAO-IMMEDIATE] ===== 즉시 응답 처리 시작 =====")
             print(f"[KAKAO-IMMEDIATE] 입력 질문: {question}")
+            print(f"[KAKAO-IMMEDIATE] callback_url: {callback_url}")
             print(f"[KAKAO-IMMEDIATE] 질문 타입: {type(question)}")
             print(f"[KAKAO-IMMEDIATE] 질문 길이: {len(question) if question else 0}")
             
@@ -191,6 +193,12 @@ class KakaoService:
             
             print(f"[KAKAO-IMMEDIATE] 응답 구조 생성 완료")
             print(f"[KAKAO-IMMEDIATE] 생성된 응답: {immediate_response}")
+            
+            # callback_url이 있으면 해당 URL로 API 요청 보내기
+            if callback_url:
+                print(f"[KAKAO-CALLBACK] callback_url 발견, API 요청 시작")
+                await self._send_callback_request(callback_url, immediate_response)
+                print(f"[KAKAO-CALLBACK] callback API 요청 완료")
             
             # 응답 검증 및 로깅
             print(f"[KAKAO-IMMEDIATE] ===== 응답 검증 시작 =====")
@@ -307,6 +315,58 @@ class KakaoService:
             }
             print(f"[KAKAO-IMMEDIATE-ERROR] 에러 응답 생성 완료")
             return error_response
+    
+    async def _send_callback_request(self, callback_url: str, response_data: Dict[str, Any]):
+        """callback_url로 API 요청을 보내는 메서드"""
+        try:
+            print(f"[KAKAO-CALLBACK] ===== callback API 요청 시작 =====")
+            print(f"[KAKAO-CALLBACK] URL: {callback_url}")
+            print(f"[KAKAO-CALLBACK] 응답 데이터: {response_data}")
+            
+            # httpx를 사용하여 비동기 HTTP POST 요청
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                print(f"[KAKAO-CALLBACK] HTTP 클라이언트 생성 완료")
+                
+                # JSON 헤더와 함께 POST 요청
+                headers = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+                
+                print(f"[KAKAO-CALLBACK] POST 요청 전송 시작")
+                response = await client.post(
+                    callback_url,
+                    json=response_data,
+                    headers=headers
+                )
+                print(f"[KAKAO-CALLBACK] POST 요청 전송 완료")
+                
+                print(f"[KAKAO-CALLBACK] 응답 상태 코드: {response.status_code}")
+                print(f"[KAKAO-CALLBACK] 응답 헤더: {dict(response.headers)}")
+                
+                if response.status_code == 200:
+                    print(f"[KAKAO-CALLBACK] callback API 요청 성공")
+                    try:
+                        response_json = response.json()
+                        print(f"[KAKAO-CALLBACK] 응답 JSON: {response_json}")
+                    except Exception as e:
+                        print(f"[KAKAO-CALLBACK] 응답 JSON 파싱 실패: {e}")
+                        print(f"[KAKAO-CALLBACK] 응답 텍스트: {response.text}")
+                else:
+                    print(f"[KAKAO-CALLBACK] callback API 요청 실패 - 상태 코드: {response.status_code}")
+                    print(f"[KAKAO-CALLBACK] 응답 텍스트: {response.text}")
+                    
+        except httpx.TimeoutException:
+            print(f"[KAKAO-CALLBACK-ERROR] callback API 요청 타임아웃")
+        except httpx.RequestError as e:
+            print(f"[KAKAO-CALLBACK-ERROR] callback API 요청 오류: {e}")
+        except Exception as e:
+            print(f"[KAKAO-CALLBACK-ERROR] callback API 요청 예외: {str(e)}")
+            print(f"[KAKAO-CALLBACK-ERROR] 예외 타입: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
+        
+        print(f"[KAKAO-CALLBACK] ===== callback API 요청 완료 =====")
 
 
 # Create a singleton instance
