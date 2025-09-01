@@ -29,17 +29,34 @@ class KakaoService:
             print(f"[REQUEST] /kakao 엔드포인트 호출됨")
             print(f"[DEBUG] 받은 요청 데이터: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
             
-            # 사용자 정보 및 파라미터 추출
-            user_id = request_data['userRequest']['user']['id']
-            utterance = request_data['userRequest']['utterance']
-            callback_url = request_data['userRequest'].get('callbackUrl')
-            
-            # action.params.message에서 실제 질문 추출
-            question = utterance
-            if 'action' in request_data and 'params' in request_data['action']:
-                params = request_data['action']['params']
-                if 'message' in params:
-                    question = params['message']
+            # 요청 데이터 형식 확인 및 처리
+            if 'userRequest' in request_data:
+                # 카카오톡 형식
+                print(f"[DEBUG] 카카오톡 형식 감지")
+                user_id = request_data['userRequest']['user']['id']
+                utterance = request_data['userRequest']['utterance']
+                callback_url = request_data['userRequest'].get('callbackUrl')
+                
+                # action.params.message에서 실제 질문 추출
+                question = utterance
+                if 'action' in request_data and 'params' in request_data['action']:
+                    params = request_data['action']['params']
+                    if 'message' in params:
+                        question = params['message']
+                        
+            elif 'message' in request_data:
+                # 간단한 메시지 형식
+                print(f"[DEBUG] 간단한 메시지 형식 감지")
+                user_id = "simple_user"
+                question = request_data['message']
+                callback_url = request_data.get('callback_url') or request_data.get('callbackUrl')
+                utterance = question
+                
+            else:
+                # 지원하지 않는 형식
+                print(f"[ERROR] 지원하지 않는 요청 형식")
+                print(f"[ERROR] 요청 키: {list(request_data.keys())}")
+                raise ValueError("지원하지 않는 요청 형식입니다.")
             
             print(f"[DEBUG] 사용자 ID: {user_id}")
             print(f"[DEBUG] 전체 발화문: {utterance}")
@@ -192,6 +209,7 @@ class KakaoService:
                 # 즉시 응답
                 immediate_response = {
                     "version": "2.0",
+                    "useCallback": True,
                     "template": {
                         "outputs": [
                             {
