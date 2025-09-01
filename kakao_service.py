@@ -139,7 +139,6 @@ class KakaoService:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 headers = {
                     "Content-Type": "application/json",
-                    "Accept": "application/json"
                 }
                 
                 response = await client.post(
