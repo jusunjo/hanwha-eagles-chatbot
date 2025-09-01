@@ -37,6 +37,15 @@ class KakaoService:
             
             user_request = request_data['userRequest']
             print(f"[KAKAO] userRequest 키: {list(user_request.keys())}")
+
+            # callbackUrl 확인 및 할당
+            callback_url = None
+            if 'callbackUrl' in user_request:
+                callback_url = user_request['callbackUrl']
+                print(f"[KAKAO] - callbackUrl 발견: {callback_url}")
+                print(f"[KAKAO] - callbackUrl 타입: {type(callback_url)}")
+            else:
+                print(f"[KAKAO] - callbackUrl 없음")
             
             if 'user' not in user_request:
                 print(f"[KAKAO-ERROR] user 필드가 없음")
