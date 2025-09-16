@@ -23,7 +23,7 @@ class SupabaseManager:
             if not supabase_url or not supabase_key:
                 raise ValueError("SUPABASE_URL과 SUPABASE_SERVICE_KEY 또는 SUPABASE_ANON_KEY 환경변수가 필요합니다.")
             
-            # Supabase 클라이언트 생성 (옵션 없이)
+            # Supabase 클라이언트 생성 (기본 옵션만 사용)
             self.supabase: Client = create_client(supabase_url, supabase_key)
             print("✅ Supabase 클라이언트 초기화 완료")
             
