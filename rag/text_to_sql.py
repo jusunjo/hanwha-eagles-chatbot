@@ -42,7 +42,8 @@ class TextToSQL:
         # 경기 일정 관련 키워드들
         schedule_keywords = [
             "경기 일정", "일정", "경기", "내일", "오늘", "어제", "다음", "이번 주",
-            "경기표", "스케줄", "대진표", "경기 시간", "경기장", "구장"
+            "경기표", "스케줄", "대진표", "경기 시간", "경기장", "구장",
+            "누구랑", "누구와", "vs", "대", "상대", "상대팀", "경기 상대"
         ]
         
         # 경기 결과 관련 키워드들
@@ -104,6 +105,12 @@ SELECT game_date, game_date_time, stadium, home_team_name, away_team_name, statu
 FROM game_schedule 
 WHERE DATE(game_date) = DATE(NOW() + INTERVAL 1 DAY)
 ORDER BY game_date_time;
+
+한화 내일 경기 상대 조회:
+SELECT home_team_name, away_team_name, game_date_time, stadium
+FROM game_schedule 
+WHERE DATE(game_date) = DATE(NOW() + INTERVAL 1 DAY) 
+AND (home_team_code = 'HH' OR away_team_code = 'HH');
 
 한화 팀 순위 조회:
 SELECT team_name, ranking, win_game_count, lose_game_count, wra 
@@ -390,9 +397,20 @@ SQL:""")
                 if game.get('game_date', '').startswith(tomorrow_str)
             ]
             
-            print(f"📅 내일 경기 일정 조회: {len(filtered_games)}개")
+            # 한화 관련 질문인지 확인
+            is_hanwha_question = any(keyword in sql.lower() for keyword in ['한화', 'hh', '누구랑', '누구와', '상대'])
             
-            return filtered_games
+            if is_hanwha_question:
+                # 한화 경기만 필터링
+                hanwha_games = [
+                    game for game in filtered_games 
+                    if game.get('home_team_code') == 'HH' or game.get('away_team_code') == 'HH'
+                ]
+                print(f"📅 내일 한화 경기 조회: {len(hanwha_games)}개")
+                return hanwha_games
+            else:
+                print(f"📅 내일 경기 일정 조회: {len(filtered_games)}개")
+                return filtered_games
             
         except Exception as e:
             print(f"❌ 경기 일정 조회 오류: {e}")
