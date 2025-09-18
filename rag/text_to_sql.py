@@ -103,9 +103,21 @@ class TextToSQL:
    - player_season_stats: player_id, player_name, gyear, team, hra, hr, rbi, era, w, l, kk, whip 등
    - player_game_stats: player_id, player_name, gameId, gday, opponent, hra, hr, rbi, era, w, l 등
 
+6. 경기 일정 관련 질문 처리 규칙:
+   - "앞으로 남은 경기", "남은 일정", "앞으로의 경기" → game_date >= 오늘 날짜
+   - "이번 달", "이번 월", "9월", "10월" → 해당 월의 모든 경기
+   - "이번 시즌", "올해", "2025년" → 2025년 모든 경기
+   - "다음 경기", "다음번 경기" → 가장 가까운 미래 경기 1개
+   - "마지막 경기", "최근 경기" → 가장 최근 경기 1개
+   - "홈 경기", "원정 경기" → home_team_code 또는 away_team_code로 구분
+   - "경기장별", "구장별" → stadium으로 그룹화
+   - "주말 경기", "주중 경기" → 요일로 구분 (토요일, 일요일 vs 월~금)
+
 질문: {question}
 
 올바른 SQL 예시:
+
+=== 선수 성적 관련 ===
 한화 타자 순위 조회:
 SELECT p.player_name, p.team, s.hra, s.hr, s.rbi 
 FROM players p
@@ -128,30 +140,122 @@ WHERE s.gyear = '2025' AND s.era IS NOT NULL
 ORDER BY s.era ASC
 LIMIT 10;
 
-내일 경기 일정 조회:
+=== 경기 일정 관련 ===
+오늘 경기 일정:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE game_date = '2025-09-18'
+ORDER BY game_date_time;
+
+내일 경기 일정:
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time
 FROM game_schedule 
-WHERE game_date = '2025-03-09'
+WHERE game_date = '2025-09-19'
 ORDER BY game_date_time;
 
 한화 내일 경기 상대 조회:
 SELECT home_team_name, away_team_name, stadium, game_date_time, home_team_score, away_team_score
 FROM game_schedule 
-WHERE game_date = '2025-03-09' 
+WHERE game_date = '2025-09-19' 
 AND (home_team_code = 'HH' OR away_team_code = 'HH');
 
-경기 결과 조회 (완료된 경기):
-SELECT home_team_name, away_team_name, home_team_score, away_team_score, winner, status_info
-FROM game_schedule 
-WHERE status_code = 'RESULT' AND game_date = '2025-03-08'
-ORDER BY game_date_time;
-
-특정 팀 경기 일정 조회:
+=== 앞으로 남은 경기 일정 ===
+한화 앞으로 남은 경기 일정:
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
 FROM game_schedule 
 WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
-AND game_date >= '2025-03-01'
+AND game_date >= '2025-09-18'
 ORDER BY game_date, game_date_time;
+
+모든 팀 앞으로 남은 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time;
+
+=== 특정 달/월 경기 일정 ===
+9월 경기 일정:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE game_date >= '2025-09-01' AND game_date < '2025-10-01'
+ORDER BY game_date, game_date_time;
+
+한화 9월 경기 일정:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
+AND game_date >= '2025-09-01' AND game_date < '2025-10-01'
+ORDER BY game_date, game_date_time;
+
+=== 이번 시즌/올해 경기 ===
+2025년 모든 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE game_date >= '2025-01-01' AND game_date < '2026-01-01'
+ORDER BY game_date, game_date_time;
+
+=== 다음/최근 경기 ===
+한화 다음 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
+AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time
+LIMIT 1;
+
+한화 최근 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, home_team_score, away_team_score, winner, status_info
+FROM game_schedule 
+WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
+AND game_date < '2025-09-18'
+ORDER BY game_date DESC, game_date_time DESC
+LIMIT 1;
+
+=== 홈/원정 경기 ===
+한화 홈 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE home_team_code = 'HH'
+AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time;
+
+한화 원정 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE away_team_code = 'HH'
+AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time;
+
+=== 경기장별 경기 ===
+특정 경기장 경기 (예: 잠실):
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE stadium = '잠실'
+AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time;
+
+=== 주말/주중 경기 ===
+주말 경기 (토요일, 일요일):
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE game_date >= '2025-09-18'
+AND (EXTRACT(DOW FROM game_date::date) = 0 OR EXTRACT(DOW FROM game_date::date) = 6)
+ORDER BY game_date, game_date_time;
+
+=== 경기 결과 ===
+완료된 경기 결과:
+SELECT game_date, home_team_name, away_team_name, home_team_score, away_team_score, winner, status_info
+FROM game_schedule 
+WHERE status_code = 'RESULT' AND game_date = '2025-09-17'
+ORDER BY game_date_time;
+
+한화 vs 두산 경기 결과:
+SELECT game_date, home_team_name, away_team_name, home_team_score, away_team_score, winner, status_info
+FROM game_schedule 
+WHERE ((home_team_code = 'HH' AND away_team_code = 'OB') OR (home_team_code = 'OB' AND away_team_code = 'HH'))
+AND status_code = 'RESULT'
+ORDER BY game_date DESC
+LIMIT 5;
 
 SQL:""")
             
@@ -431,14 +535,17 @@ SQL:""")
                 ]
                 print(f"📅 {target_date} 경기 조회: {len(filtered_games)}개")
             else:
-                # 기본적으로 내일 경기 필터링
-                tomorrow = date.today() + timedelta(days=1)
-                tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+                # 기본적으로 한 달 동안의 경기 필터링 (오늘부터 30일 후까지)
+                today = date.today()
+                one_month_later = today + timedelta(days=30)
+                today_str = today.strftime("%Y-%m-%d")
+                one_month_later_str = one_month_later.strftime("%Y-%m-%d")
+                
                 filtered_games = [
                     game for game in result.data 
-                    if game.get('game_date', '').startswith(tomorrow_str)
+                    if game.get('game_date', '') >= today_str and game.get('game_date', '') <= one_month_later_str
                 ]
-                print(f"📅 내일 경기 조회: {len(filtered_games)}개")
+                print(f"📅 한 달간 경기 조회 ({today_str} ~ {one_month_later_str}): {len(filtered_games)}개")
             
             # 한화 관련 질문인지 확인
             is_hanwha_question = any(keyword in question.lower() for keyword in ['한화', 'hh', '누구랑', '누구와', '상대'])
@@ -762,7 +869,24 @@ def main():
             "이번주 금요일 한화 경기",
             "3일 후 경기 일정",
             "9월 18일 경기 결과",
-            "2025-09-18 경기 일정"
+            "2025-09-18 경기 일정",
+            # 새로운 경기 일정 관련 질문들
+            "한화 앞으로 남은 경기 일정",
+            "앞으로 남은 경기들",
+            "이번 달 경기 일정",
+            "9월 경기 일정",
+            "한화 9월 경기 일정",
+            "이번 시즌 경기 일정",
+            "2025년 모든 경기",
+            "한화 다음 경기",
+            "한화 최근 경기",
+            "한화 홈 경기",
+            "한화 원정 경기",
+            "잠실 경기 일정",
+            "주말 경기 일정",
+            "주중 경기 일정",
+            "한화 vs 두산 경기 결과",
+            "최근 한화 경기 결과"
         ]
         
         for question in test_questions:
