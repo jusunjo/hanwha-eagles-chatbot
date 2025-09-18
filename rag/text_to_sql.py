@@ -89,8 +89,7 @@ class TextToSQL:
    - record.season은 JSON 배열이므로 WHERE에서 직접 비교하지 마세요
 
 데이터베이스 스키마:
-- pcode 테이블: playerName, team, pcode
-- player_info 테이블: playerName, record, basicRecord
+- player_info 테이블: playerName, pcode, team, record, basicRecord
 - game_schedule 테이블: game_id, game_date, game_date_time, stadium, home_team_code, home_team_name, away_team_code, away_team_name, status_code, status_info, home_team_score, away_team_score, winner
 - game_result 테이블: team_id, team_name, year, ranking, win_game_count, lose_game_count, wra
 
@@ -98,17 +97,15 @@ class TextToSQL:
 
 올바른 SQL 예시:
 한화 타자 순위 조회:
-SELECT p.playerName, pi.record 
-FROM pcode p 
-JOIN player_info pi ON p.playerName = pi.playerName 
-WHERE p.team = 'HH' 
+SELECT playerName, record 
+FROM player_info 
+WHERE team = 'HH' 
 LIMIT 5;
 
 특정 선수 성적 조회 (문동주):
-SELECT p.playerName, pi.record 
-FROM pcode p 
-JOIN player_info pi ON p.playerName = pi.playerName 
-WHERE p.playerName = '문동주';
+SELECT playerName, record 
+FROM player_info 
+WHERE playerName = '문동주';
 
 내일 경기 일정 조회:
 SELECT game_date, game_date_time, stadium, home_team_name, away_team_name, status_info
@@ -242,25 +239,14 @@ SQL:""")
                         # 찾은 선수들의 정보를 player_info에서 조회
                         print(f"🔍 선수명 발견: {found_players} - player_info에서 조회")
                         
-                        # 각 선수에 대해 pcode와 player_info 조인 데이터 조회
+                        # 각 선수에 대해 player_info에서 데이터 조회
                         joined_data = []
                         for player_name in found_players:
-                            # pcode에서 선수 기본 정보 조회
-                            pcode_result = self.supabase.supabase.table("pcode").select("*").eq("playerName", player_name).execute()
-                            
-                            # player_info에서 선수 성적 조회
+                            # player_info에서 선수 정보 조회
                             player_info_result = self.supabase.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
                             
-                            if pcode_result.data and player_info_result.data:
-                                # 조인된 데이터 생성
-                                for pcode_row in pcode_result.data:
-                                    for player_info_row in player_info_result.data:
-                                        joined_row = {
-                                            **pcode_row,
-                                            "record": player_info_row.get("record", {}),
-                                            "basicRecord": player_info_row.get("basicRecord", {})
-                                        }
-                                        joined_data.append(joined_row)
+                            if player_info_result.data:
+                                joined_data.extend(player_info_result.data)
                         
                         return joined_data
                         
@@ -280,7 +266,7 @@ SQL:""")
                     return self._get_team_players(team_code, team_name)
             
             # 일반 선수 데이터 조회 (모든 KBO 팀)
-            result = self.supabase.supabase.table("pcode").select("*").execute()
+            result = self.supabase.supabase.table("player_info").select("*").execute()
             return result.data if result.data else []
             
         except Exception as e:
@@ -290,33 +276,30 @@ SQL:""")
     def _get_kbo_pitchers(self) -> list:
         """KBO 투수 데이터 조회"""
         try:
-            # pcode에서 모든 KBO 선수들 조회
-            kbo_players = self.supabase.supabase.table('pcode').select('*').execute()
+            # player_info에서 모든 KBO 선수들 조회
+            kbo_players = self.supabase.supabase.table('player_info').select('*').execute()
             
             kbo_pitchers = []
             for player in kbo_players.data:
-                player_name = player['playerName']
-                player_info = self.supabase.supabase.table('player_info').select('*').eq('playerName', player_name).execute()
-                
-                if player_info.data:
-                    data = player_info.data[0]
-                    record = data.get('record', {})
-                    if 'season' in record:
-                        # 2025년 시즌 데이터 찾기
-                        for season in record['season']:
-                            if season.get('gyear') == '2025':
-                                # 투수 데이터인지 확인 (ERA가 있으면 투수)
-                                if season.get('era') and season.get('era') != 'N/A':
-                                    kbo_pitchers.append({
-                                        'playerName': player_name,
-                                        'team': season.get('team', ''),
-                                        'era': season.get('era'),
-                                        'w': season.get('w'),
-                                        'l': season.get('l'),
-                                        'kk': season.get('kk'),
-                                        'whip': season.get('whip'),
-                                        'gyear': '2025'
-                                    })
+                data = player
+                player_name = data.get('playerName', '')
+                record = data.get('record', {})
+                if 'season' in record:
+                    # 2025년 시즌 데이터 찾기
+                    for season in record['season']:
+                        if season.get('gyear') == '2025':
+                            # 투수 데이터인지 확인 (ERA가 있으면 투수)
+                            if season.get('era') and season.get('era') != 'N/A':
+                                kbo_pitchers.append({
+                                    'playerName': player_name,
+                                    'team': season.get('team', ''),
+                                    'era': season.get('era'),
+                                    'w': season.get('w'),
+                                    'l': season.get('l'),
+                                    'kk': season.get('kk'),
+                                    'whip': season.get('whip'),
+                                    'gyear': '2025'
+                                })
                                 break
             
             return kbo_pitchers
@@ -328,36 +311,33 @@ SQL:""")
     def _get_kbo_hitters(self) -> list:
         """KBO 타자 데이터 조회"""
         try:
-            # pcode에서 모든 KBO 선수들 조회
-            kbo_players = self.supabase.supabase.table('pcode').select('*').execute()
+            # player_info에서 모든 KBO 선수들 조회
+            kbo_players = self.supabase.supabase.table('player_info').select('*').execute()
             
             kbo_hitters = []
             for player in kbo_players.data:
-                player_name = player['playerName']
-                player_info = self.supabase.supabase.table('player_info').select('*').eq('playerName', player_name).execute()
-                
-                if player_info.data:
-                    data = player_info.data[0]
-                    record = data.get('record', {})
-                    if 'season' in record:
-                        # 2025년 시즌 데이터 찾기
-                        for season in record['season']:
-                            if season.get('gyear') == '2025':
-                                # 타자 데이터인지 확인 (hra가 있으면 타자)
-                                if season.get('hra') and season.get('hra') != 'N/A':
-                                    kbo_hitters.append({
-                                        'playerName': player_name,
-                                        'team': season.get('team', ''),
-                                        'hra': season.get('hra'),  # 타율
-                                        'hr': season.get('hr'),    # 홈런
-                                        'rbi': season.get('rbi'),  # 타점
-                                        'hit': season.get('hit'),  # 안타
-                                        'ab': season.get('ab'),    # 타석
-                                        'obp': season.get('obp'),  # 출루율
-                                        'slg': season.get('slg'),  # 장타율
-                                        'ops': season.get('ops'),  # OPS
-                                        'gyear': '2025'
-                                    })
+                data = player
+                player_name = data.get('playerName', '')
+                record = data.get('record', {})
+                if 'season' in record:
+                    # 2025년 시즌 데이터 찾기
+                    for season in record['season']:
+                        if season.get('gyear') == '2025':
+                            # 타자 데이터인지 확인 (hra가 있으면 타자)
+                            if season.get('hra') and season.get('hra') != 'N/A':
+                                kbo_hitters.append({
+                                    'playerName': player_name,
+                                    'team': season.get('team', ''),
+                                    'hra': season.get('hra'),  # 타율
+                                    'hr': season.get('hr'),    # 홈런
+                                    'rbi': season.get('rbi'),  # 타점
+                                    'hit': season.get('hit'),  # 안타
+                                    'ab': season.get('ab'),    # 타석
+                                    'obp': season.get('obp'),  # 출루율
+                                    'slg': season.get('slg'),  # 장타율
+                                    'ops': season.get('ops'),  # OPS
+                                    'gyear': '2025'
+                                })
                                 break
             
             return kbo_hitters
@@ -369,55 +349,52 @@ SQL:""")
     def _get_team_players(self, team_code: str, team_name: str) -> list:
         """특정 팀 선수 데이터 조회 (투수 + 타자)"""
         try:
-            # pcode에서 해당 팀 선수들만 조회
-            team_players = self.supabase.supabase.table('pcode').select('*').eq('team', team_code).execute()
+            # player_info에서 해당 팀 선수들만 조회
+            team_players = self.supabase.supabase.table('player_info').select('*').eq('team', team_code).execute()
             
             all_team_players = []
             for player in team_players.data:
-                player_name = player['playerName']
-                player_info = self.supabase.supabase.table('player_info').select('*').eq('playerName', player_name).execute()
+                data = player
+                player_name = data.get('playerName', '')
+                record = data.get('record', {})
+                basic_record = data.get('basicRecord', {})
                 
-                if player_info.data:
-                    data = player_info.data[0]
-                    record = data.get('record', {})
-                    basic_record = data.get('basicRecord', {})
-                    
-                    player_data = {
-                        'playerName': player_name,
+                player_data = {
+                    'playerName': player_name,
                         'team': team_code,
                         'teamName': team_name,
                         'position': basic_record.get('position', ''),
                         'gyear': '2025'
                     }
                     
-                    if 'season' in record:
-                        # 2025년 시즌 데이터 찾기
-                        for season in record['season']:
-                            if season.get('gyear') == '2025':
-                                # 투수 데이터 (ERA가 있으면)
-                                if season.get('era') and season.get('era') != 'N/A':
-                                    player_data.update({
-                                        'type': 'pitcher',
-                                        'era': season.get('era'),
-                                        'w': season.get('w'),
-                                        'l': season.get('l'),
-                                        'kk': season.get('kk'),
-                                        'whip': season.get('whip')
-                                    })
-                                # 타자 데이터 (hra가 있으면)
-                                elif season.get('hra') and season.get('hra') != 'N/A':
-                                    player_data.update({
-                                        'type': 'hitter',
-                                        'hra': season.get('hra'),  # 타율
-                                        'hr': season.get('hr'),    # 홈런
-                                        'rbi': season.get('rbi'),  # 타점
-                                        'hit': season.get('hit'),  # 안타
-                                        'ab': season.get('ab'),    # 타석
-                                        'obp': season.get('obp'),  # 출루율
-                                        'slg': season.get('slg'),  # 장타율
-                                        'ops': season.get('ops')   # OPS
-                                    })
-                                break
+                if 'season' in record:
+                    # 2025년 시즌 데이터 찾기
+                    for season in record['season']:
+                        if season.get('gyear') == '2025':
+                            # 투수 데이터 (ERA가 있으면)
+                            if season.get('era') and season.get('era') != 'N/A':
+                                player_data.update({
+                                    'type': 'pitcher',
+                                    'era': season.get('era'),
+                                    'w': season.get('w'),
+                                    'l': season.get('l'),
+                                    'kk': season.get('kk'),
+                                    'whip': season.get('whip')
+                                })
+                            # 타자 데이터 (hra가 있으면)
+                            elif season.get('hra') and season.get('hra') != 'N/A':
+                                player_data.update({
+                                    'type': 'hitter',
+                                    'hra': season.get('hra'),  # 타율
+                                    'hr': season.get('hr'),    # 홈런
+                                    'rbi': season.get('rbi'),  # 타점
+                                    'hit': season.get('hit'),  # 안타
+                                    'ab': season.get('ab'),    # 타석
+                                    'obp': season.get('obp'),  # 출루율
+                                    'slg': season.get('slg'),  # 장타율
+                                    'ops': season.get('ops')   # OPS
+                                })
+                            break
                     
                     all_team_players.append(player_data)
             

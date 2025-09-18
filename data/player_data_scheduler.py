@@ -37,21 +37,21 @@ class PlayerDataScheduler:
             print(f"❌ Supabase 연결 실패: {e}")
             raise e
     
-    def get_all_players_from_pcode(self) -> List[Dict[str, Any]]:
-        """pcode 테이블에서 모든 선수 조회"""
+    def get_all_players_from_player_info(self) -> List[Dict[str, Any]]:
+        """player_info 테이블에서 모든 선수 조회"""
         try:
-            print("🔍 pcode 테이블에서 모든 선수 조회 중...")
-            result = self.supabase.supabase.table("pcode").select("*").execute()
+            print("🔍 player_info 테이블에서 모든 선수 조회 중...")
+            result = self.supabase.supabase.table("player_info").select("*").execute()
             
             if result.data:
                 print(f"✅ {len(result.data)}명의 선수 조회 완료")
                 return result.data
             else:
-                print("❌ pcode 테이블에 선수 데이터가 없습니다.")
+                print("❌ player_info 테이블에 선수 데이터가 없습니다.")
                 return []
                 
         except Exception as e:
-            print(f"❌ pcode 테이블 조회 오류: {e}")
+            print(f"❌ player_info 테이블 조회 오류: {e}")
             return []
     
     def fetch_player_data_from_api(self, player_name: str, pcode: str) -> Dict[str, Any]:
@@ -211,8 +211,8 @@ class PlayerDataScheduler:
         print(f"⏰ 시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
-            # 1. pcode 테이블에서 모든 선수 조회
-            players = self.get_all_players_from_pcode()
+            # 1. player_info 테이블에서 모든 선수 조회
+            players = self.get_all_players_from_player_info()
             
             if not players:
                 print("❌ 수집할 선수가 없습니다.")

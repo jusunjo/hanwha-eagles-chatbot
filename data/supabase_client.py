@@ -123,9 +123,9 @@ class SupabaseManager:
             return []
     
     def get_all_players(self) -> List[Dict[str, Any]]:
-        """모든 선수 데이터 조회 (pcode 테이블에서)"""
+        """모든 선수 데이터 조회 (player_info 테이블에서)"""
         try:
-            result = self.supabase.table("pcode").select("*").execute()
+            result = self.supabase.table("player_info").select("*").execute()
             return result.data or []
             
         except Exception as e:
@@ -135,7 +135,7 @@ class SupabaseManager:
     def get_player_mapping(self) -> Dict[str, str]:
         """선수 매핑 정보 조회 (playerName -> pcode)"""
         try:
-            result = self.supabase.table("pcode").select("playerName, pcode").execute()
+            result = self.supabase.table("player_info").select("playerName, pcode").execute()
             
             if result.data:
                 mapping = {}
@@ -156,7 +156,7 @@ class SupabaseManager:
     def get_pcode_by_name(self, player_name: str) -> Optional[str]:
         """선수 이름으로 pcode 조회"""
         try:
-            result = self.supabase.table("pcode").select("pcode").eq("playerName", player_name).execute()
+            result = self.supabase.table("player_info").select("pcode").eq("playerName", player_name).execute()
             
             if result.data:
                 return result.data[0].get("pcode")
