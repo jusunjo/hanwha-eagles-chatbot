@@ -78,10 +78,14 @@ class TextToSQL:
    - "롯데" → "LT", "삼성" → "SS", "SSG" → "SK"
    - "KT" → "KT", "NC" → "NC", "LG" → "LG"
 
-2. 타율 필드명:
+2. 선수명은 그대로 사용하세요:
+   - "문동주", "이정후", "김하성" 등 선수명은 팀 코드로 변환하지 마세요
+   - 선수명은 pcode.playerName 또는 player_info.playerName에서 직접 검색
+
+3. 타율 필드명:
    - 타율은 "hra" 필드만 사용 (절대 "avg", "battingAverage" 사용 금지)
 
-3. 시즌 데이터:
+4. 시즌 데이터:
    - record.season은 JSON 배열이므로 WHERE에서 직접 비교하지 마세요
 
 데이터베이스 스키마:
@@ -99,6 +103,12 @@ FROM pcode p
 JOIN player_info pi ON p.playerName = pi.playerName 
 WHERE p.team = 'HH' 
 LIMIT 5;
+
+특정 선수 성적 조회 (문동주):
+SELECT p.playerName, pi.record 
+FROM pcode p 
+JOIN player_info pi ON p.playerName = pi.playerName 
+WHERE p.playerName = '문동주';
 
 내일 경기 일정 조회:
 SELECT game_date, game_date_time, stadium, home_team_name, away_team_name, status_info
@@ -217,7 +227,48 @@ SQL:""")
             if "타자" in sql or "hitter" in sql.lower():
                 return self._get_kbo_hitters()
             
-            # 특정 팀 선수 조회
+            # 선수명이 포함된 질문인지 확인하고 직접 player_info에서 조회
+            # pcode에서 모든 선수명을 가져와서 SQL에 포함된 선수명 찾기
+            try:
+                all_players = self.supabase.supabase.table("pcode").select("playerName").execute()
+                
+                if all_players.data:
+                    player_names = [player["playerName"] for player in all_players.data]
+                    
+                    # SQL에 포함된 선수명 찾기
+                    found_players = [name for name in player_names if name in sql]
+                    
+                    if found_players:
+                        # 찾은 선수들의 정보를 player_info에서 조회
+                        print(f"🔍 선수명 발견: {found_players} - player_info에서 조회")
+                        
+                        # 각 선수에 대해 pcode와 player_info 조인 데이터 조회
+                        joined_data = []
+                        for player_name in found_players:
+                            # pcode에서 선수 기본 정보 조회
+                            pcode_result = self.supabase.supabase.table("pcode").select("*").eq("playerName", player_name).execute()
+                            
+                            # player_info에서 선수 성적 조회
+                            player_info_result = self.supabase.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
+                            
+                            if pcode_result.data and player_info_result.data:
+                                # 조인된 데이터 생성
+                                for pcode_row in pcode_result.data:
+                                    for player_info_row in player_info_result.data:
+                                        joined_row = {
+                                            **pcode_row,
+                                            "record": player_info_row.get("record", {}),
+                                            "basicRecord": player_info_row.get("basicRecord", {})
+                                        }
+                                        joined_data.append(joined_row)
+                        
+                        return joined_data
+                        
+            except Exception as e:
+                print(f"⚠️ 선수명 조회 중 오류: {e}")
+                # 오류 발생 시 기존 로직으로 진행
+            
+            # 특정 팀 선수 조회 (팀명이 명시적으로 언급된 경우만)
             team_keywords = {
                 "한화": "HH", "두산": "OB", "KIA": "HT", "키움": "WO", 
                 "롯데": "LT", "삼성": "SS", "SSG": "SK", "KT": "KT", 
@@ -416,6 +467,7 @@ SQL:""")
             print(f"❌ 경기 일정 조회 오류: {e}")
             return []
     
+
     def _get_team_stats_data(self, sql: str) -> list:
         """팀 통계 데이터 조회"""
         try:
@@ -484,6 +536,14 @@ SQL:""")
                 "ERA", "WHIP", "세이브", "홀드", "완투", "퀄리티스타트"
             ])
             
+            # 선수 성적 관련 질문인지 확인
+            is_player_stats_question = any(keyword in question for keyword in [
+                "성적", "어때", "어떻게", "요즘", "최근", "지금", "현재",
+                "투수", "타자", "선수", "선발", "구원", "마무리"
+            ]) and any(keyword in question for keyword in [
+                "문동주", "이정후", "김하성", "류현진", "오승환", "최지만", "박건우", "김현수"
+            ])
+            
             if is_schedule_question:
                 prompt = ChatPromptTemplate.from_template("""
 당신은 KBO 전문 분석가입니다. 다음 경기 일정 데이터를 바탕으로 사용자의 질문에 답변해주세요.
@@ -515,6 +575,24 @@ SQL:""")
 3. 한국어로 친근하게 답변하세요
 4. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
 5. 팀명은 정확히 표시하세요
+
+답변:""")
+            elif is_player_stats_question:
+                prompt = ChatPromptTemplate.from_template("""
+당신은 KBO 전문 분석가입니다. 다음 선수 성적 데이터를 바탕으로 사용자의 질문에 답변해주세요.
+
+질문: {question}
+
+선수 성적 데이터:
+{context}
+
+답변 규칙:
+1. 선수의 최근 성적을 명확하고 읽기 쉽게 정리해서 보여주세요
+2. 2025년 시즌 성적을 우선적으로 보여주고, 통산 성적도 참고하세요
+3. ERA, 승수, 패수, WHIP, 삼진수, 이닝수 등 구체적인 수치를 포함하세요
+4. 한국어로 친근하게 답변하세요
+5. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
+6. 선수명은 정확히 표시하세요
 
 답변:""")
             else:
