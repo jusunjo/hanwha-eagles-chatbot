@@ -47,7 +47,7 @@ async def kakao_webhook(request: Request):
 @app.post("/test")
 async def test_endpoint(request: Request):
     """
-    Test endpoint for direct text-to-sql testing
+    Test endpoint for direct text-to-sql testing (기존 하드코딩된 시스템)
     """
     try:
         request_data = await request.json()
@@ -66,6 +66,7 @@ async def test_endpoint(request: Request):
     except Exception as e:
         logger.error(f"Error in test endpoint: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 if __name__ == "__main__":
     import uvicorn

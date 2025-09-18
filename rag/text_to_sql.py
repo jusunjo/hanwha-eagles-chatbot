@@ -18,7 +18,7 @@ class TextToSQL:
         """Text-to-SQL 초기화"""
         try:
             self.llm = ChatOpenAI(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 temperature=0.1,
                 api_key=os.getenv("OPENAI_API_KEY")
             )
@@ -31,6 +31,10 @@ class TextToSQL:
     
     def should_use_text_to_sql(self, question: str) -> bool:
         """Text-to-SQL을 사용해야 하는 질문인지 판단"""
+        # 선수 비교 질문인지 먼저 확인 (우선순위)
+        if self._is_player_comparison_question(question):
+            return True
+        
         # 복합 질문 키워드들
         complex_keywords = [
             "가장", "최고", "1위", "순위", "비교", "평균", "총합", "합계",
@@ -39,11 +43,11 @@ class TextToSQL:
             "어떤", "누가", "몇 명", "얼마나", "어느"
         ]
         
-        # 경기 일정 관련 키워드들
+        # 경기 일정 관련 키워드들 (vs는 제외)
         schedule_keywords = [
             "경기 일정", "일정", "경기", "내일", "오늘", "어제", "다음", "이번 주",
             "경기표", "스케줄", "대진표", "경기 시간", "경기장", "구장",
-            "누구랑", "누구와", "vs", "대", "상대", "상대팀", "경기 상대"
+            "누구랑", "누구와", "대", "상대", "상대팀", "경기 상대"
         ]
         
         # 경기 결과 관련 키워드들
@@ -65,6 +69,45 @@ class TextToSQL:
                 any(keyword in question for keyword in result_keywords) or
                 any(keyword in question for keyword in team_stats_keywords))
     
+    def _is_player_comparison_question(self, question: str) -> bool:
+        """선수 비교 질문인지 판단"""
+        import re
+        
+        # 팀 비교 질문인지 먼저 확인
+        if self._is_team_comparison_question(question):
+            return False
+        
+        # 선수명 vs 선수명 패턴 확인
+        # 예: "폰세 vs 원태인", "문동주 vs 이정후"
+        vs_pattern = r'[\w가-힣]+\s+vs\s+[\w가-힣]+'
+        if re.search(vs_pattern, question, re.IGNORECASE):
+            return True
+        
+        # 선수명과 선수명이 함께 언급되는 패턴
+        # 예: "폰세와 원태인", "문동주와 이정후 비교"
+        comparison_keywords = ['vs', '대', '비교', '어떤', '누가', '더']
+        
+        # 두 개 이상의 선수명이 있는지 확인
+        # (간단한 휴리스틱: 공백으로 구분된 단어들 중에서)
+        words = question.split()
+        potential_names = [word for word in words if len(word) >= 2 and not word.isdigit()]
+        
+        if len(potential_names) >= 2 and any(keyword in question for keyword in comparison_keywords):
+            return True
+        
+        return False
+    
+    def _is_team_comparison_question(self, question: str) -> bool:
+        """팀 비교 질문인지 판단"""
+        team_keywords = ['한화', '두산', 'KIA', '키움', '롯데', '삼성', 'SSG', 'KT', 'NC', 'LG']
+        comparison_keywords = ['vs', '대', '비교', '어떤', '누가', '더', '이길', '이길거', '승리']
+        
+        # 팀명이 2개 이상 언급되고 비교 키워드가 있는지 확인
+        team_count = sum(1 for team in team_keywords if team in question)
+        has_comparison = any(keyword in question for keyword in comparison_keywords)
+        
+        return team_count >= 2 and has_comparison
+    
     def generate_sql(self, question: str) -> str:
         """자연어 질문을 SQL로 변환"""
         try:
@@ -85,7 +128,12 @@ class TextToSQL:
 3. 타율 필드명:
    - 타율은 "hra" 필드만 사용 (절대 "avg", "battingAverage" 사용 금지)
 
-4. game_schedule 테이블 구조 (실제 컬럼들):
+4. 선수 비교 질문 처리:
+   - "폰세 vs 원태인", "문동주와 이정후" 같은 질문은 선수 성적 비교
+   - 경기 일정이 아닌 선수 시즌 통계를 조회해야 함
+   - player_season_stats 테이블에서 해당 선수들의 2025년 성적 조회
+
+5. game_schedule 테이블 구조 (실제 컬럼들):
    - game_id, super_category_id, category_id, category_name
    - game_date, game_date_time, time_tbd, stadium, title
    - home_team_code, home_team_name, home_team_score
@@ -119,31 +167,52 @@ class TextToSQL:
    - 타격 통계: hra (타율), hr (홈런), rbi (타점), ab (타석), hit (안타), h2 (2루타), h3 (3루타), sb (도루), bbhp (볼넷+사구), kk (삼진), gd (병살타), obp (출루율), slg (장타율), ops (OPS)
    - 투수 통계: era (평균자책점), w (승수), l (패수), sv (세이브), hold (홀드), wp (완투), qs (퀄리티스타트), whip (WHIP), kk (삼진), bbhp (볼넷+사구), er (자책점), r (실점), inning (이닝), hit (피안타), hr (피홈런), err (실책)
 
-9. 경기 일정 관련 질문 처리 규칙:
-   - "앞으로 남은 경기", "남은 일정", "앞으로의 경기" → game_date >= 오늘 날짜
-   - "이번 달", "이번 월", "9월", "10월" → 해당 월의 모든 경기
-   - "이번 시즌", "올해", "2025년" → 2025년 모든 경기
-   - "다음 경기", "다음번 경기" → 가장 가까운 미래 경기 1개
-   - "마지막 경기", "최근 경기" → 가장 최근 경기 1개
-   - "홈 경기", "원정 경기" → home_team_code 또는 away_team_code로 구분
-   - "경기장별", "구장별" → stadium으로 그룹화
-   - "주말 경기", "주중 경기" → 요일로 구분 (토요일, 일요일 vs 월~금)
+9. 포괄적 질문 처리 규칙 (모든 질문 유형 대응):
 
-10. 팀 순위 및 통계 관련 질문 처리 규칙:
-   - "순위", "랭킹", "몇 위", "등수" → game_result.ranking 사용
-   - "승률", "승수", "패수", "몇승", "몇패" → game_result.wra, win_game_count, lose_game_count 사용
-   - "팀 타율", "팀 홈런", "팀 ERA" → game_result.offense_hra, offense_hr, defense_era 사용
-   - "한화 순위", "한화 승률", "한화 전적" → team_id = 'HH'로 필터링
-   - "1위", "2위", "3위" → ranking = 1, 2, 3으로 필터링
-   - "상위권", "하위권" → ranking <= 5 (상위권), ranking >= 6 (하위권)
+📅 경기 일정 관련:
+   - 시간: "오늘", "내일", "어제", "이번 주", "다음 주", "이번 달", "9월", "10월" → 날짜 필터링
+   - 팀: "한화", "두산", "KIA" 등 → home_team_code/away_team_code 필터링
+   - 장소: "홈", "원정", "잠실", "고척" → home_team_code/away_team_code/stadium 필터링
+   - 기간: "앞으로", "남은", "다음", "최근", "마지막" → 날짜 범위 필터링
+   - 요일: "주말", "주중", "토요일", "일요일" → 요일 필터링
+   - 대결: "한화 vs 두산" → 양팀 코드 필터링
 
-11. 선수 성적 관련 질문 처리 규칙:
-   - "타율", "홈런", "타점", "안타", "출루율", "장타율", "OPS" → hra, hr, rbi, hit, obp, slg, ops 사용
-   - "ERA", "WHIP", "승수", "패수", "세이브", "홀드" → era, whip, w, l, sv, hold 사용
-   - "시즌 성적", "이번 시즌" → player_season_stats 테이블 사용
-   - "경기별 성적", "특정 경기" → player_game_stats 테이블 사용
-   - "한화 선수", "특정 팀 선수" → team 필드로 필터링
-   - "투수", "타자" → position 필드로 필터링
+🏆 경기 결과 관련:
+   - 결과: "결과", "전적", "승부" → status_code = 'RESULT' 필터링
+   - 통계: "승률", "몇승", "몇패", "순위" → game_result 테이블 사용
+   - 팀별: "한화", "두산" 등 → team_id 필터링
+   - 시즌: "이번 시즌", "2025년" → year = '2025' 필터링
+
+👨‍⚾ 선수 성적 관련:
+   - 개인: "문동주", "이정후" 등 → player_name 필터링
+   - 팀별: "한화 선수", "두산 선수" → team 필터링
+   - 포지션: "투수", "타자" → position 필터링
+   - 통계: "타율", "홈런", "타점", "ERA", "WHIP" → 해당 컬럼 사용
+   - 순위: "1위", "최고", "가장" → ORDER BY + LIMIT 사용
+   - 기간: "시즌", "이번 시즌" → player_season_stats, "경기별" → player_game_stats
+
+🏟️ 구장/팀 정보 관련:
+   - 구장: "잠실", "고척", "홈구장" → stadium 필터링
+   - 팀 정보: "감독", "구단주", "홈구장" → 별도 팀 정보 테이블 필요시
+   - 선수 역할: "선발투수", "마무리투수", "4번타자" → position + 역할 필터링
+
+📊 통계 관련:
+   - 팀 통계: "팀 타율", "팀 홈런", "팀 ERA" → game_result.offense_hra, offense_hr, defense_era
+   - 개인 통계: "홈런 개수", "타점", "도루", "완봉", "세이브" → 해당 컬럼 사용
+   - 시즌 통계: "이번 시즌" → gyear = '2025' 필터링
+
+10. 테이블 선택 가이드:
+   - 경기 일정/결과 → game_schedule
+   - 팀 순위/통계 → game_result  
+   - 선수 시즌 성적 → player_season_stats
+   - 선수 경기별 성적 → player_game_stats
+   - 선수 기본 정보 → players
+
+11. 공통 필터링 규칙:
+   - 팀명 → 팀 코드 변환 필수
+   - 날짜 → YYYY-MM-DD 형식 사용
+   - 순위 → ORDER BY + LIMIT 조합
+   - 통계 → NULL 값 제외 (WHERE 컬럼 IS NOT NULL)
 
 질문: {question}
 
@@ -163,6 +232,17 @@ SELECT p.player_name, s.hra, s.hr, s.rbi, s.ab
 FROM players p
 JOIN player_season_stats s ON p.id = s.player_id
 WHERE p.player_name = '문동주' AND s.gyear = '2025';
+
+선수 비교 질문 (폰세 vs 원태인):
+SELECT p.player_name, p.team, s.era, s.w, s.l, s.kk, s.whip, s.war
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.player_name IN ('폰세', '원태인') AND s.gyear = '2025';
+
+팀 비교 질문 (한화 vs 두산):
+SELECT team_name, ranking, wra, win_game_count, lose_game_count, offense_hra, defense_era
+FROM game_result 
+WHERE team_id IN ('HH', 'OB') AND year = '2025';
 
 투수 ERA 순위 조회:
 SELECT p.player_name, p.team, s.era, s.w, s.l, s.kk
@@ -404,6 +484,123 @@ WHERE p.team = 'HH' AND s.gyear = '2025' AND p.position != '투수'
 ORDER BY s.hr DESC
 LIMIT 1;
 
+=== 추가 질문 유형별 SQL 예시 ===
+
+📅 세부 경기 일정 질문들:
+한화 다음 경기 상대:
+SELECT home_team_name, away_team_name, game_date, stadium
+FROM game_schedule 
+WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
+AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time
+LIMIT 1;
+
+한화 원정 경기 일정:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time
+FROM game_schedule 
+WHERE away_team_code = 'HH' AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time;
+
+이번 달 한화 경기 개수:
+SELECT COUNT(*) as game_count
+FROM game_schedule 
+WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
+AND game_date >= '2025-09-01' AND game_date < '2025-10-01';
+
+🏟️ 구장 관련 질문들:
+고척 경기 일정:
+SELECT game_date, home_team_name, away_team_name, game_date_time, status_info
+FROM game_schedule 
+WHERE stadium = '고척' AND game_date >= '2025-09-18'
+ORDER BY game_date, game_date_time;
+
+각 팀 홈구장:
+SELECT DISTINCT home_team_name, stadium
+FROM game_schedule 
+WHERE game_date >= '2025-01-01'
+ORDER BY home_team_name;
+
+🏆 세부 경기 결과 질문들:
+한화 vs 특정팀 경기 결과:
+SELECT game_date, home_team_name, away_team_name, home_team_score, away_team_score, winner
+FROM game_schedule 
+WHERE ((home_team_code = 'HH' AND away_team_code = 'OB') OR (home_team_code = 'OB' AND away_team_code = 'HH'))
+AND status_code = 'RESULT'
+ORDER BY game_date DESC
+LIMIT 10;
+
+👨‍⚾ 선수 역할 관련 질문들:
+한화 선발투수:
+SELECT p.player_name, s.era, s.w, s.l, s.whip
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.team = 'HH' AND p.position = '투수' AND s.gyear = '2025'
+ORDER BY s.era ASC
+LIMIT 5;
+
+한화 마무리투수:
+SELECT p.player_name, s.sv, s.era, s.whip
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.team = 'HH' AND p.position = '투수' AND s.gyear = '2025' AND s.sv > 0
+ORDER BY s.sv DESC
+LIMIT 5;
+
+📊 시즌 통계 관련 질문들:
+한화 이번 시즌 홈런 개수:
+SELECT SUM(offense_hr) as total_hr
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 이번 시즌 타점:
+SELECT SUM(offense_rbi) as total_rbi
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 이번 시즌 도루:
+SELECT SUM(offense_sb) as total_sb
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 이번 시즌 완봉:
+SELECT SUM(defense_wp) as total_wp
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 이번 시즌 세이브:
+SELECT SUM(defense_save) as total_save
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+📈 순위 및 비교 질문들:
+KBO 타율 순위 (상위 10명):
+SELECT p.player_name, p.team, s.hra, s.hr, s.rbi
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE s.gyear = '2025' AND p.position != '투수' AND s.hra IS NOT NULL
+ORDER BY s.hra DESC
+LIMIT 10;
+
+KBO ERA 순위 (상위 10명):
+SELECT p.player_name, p.team, s.era, s.w, s.l, s.whip
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE s.gyear = '2025' AND p.position = '투수' AND s.era IS NOT NULL
+ORDER BY s.era ASC
+LIMIT 10;
+
+팀 홈런 순위:
+SELECT team_name, offense_hr, offense_rbi, offense_ops
+FROM game_result 
+WHERE year = '2025'
+ORDER BY offense_hr DESC;
+
+팀 ERA 순위:
+SELECT team_name, defense_era, defense_whip, defense_save
+FROM game_result 
+WHERE year = '2025'
+ORDER BY defense_era ASC;
+
 SQL:""")
             
             response = self.llm.invoke(prompt.format(question=question))
@@ -496,49 +693,82 @@ SQL:""")
         """선수 데이터 조회"""
         try:
             sql_lower = sql.lower()
+            print(f"🔍 SQL 파싱 중: {sql}")
             
             # 특정 선수명이 포함된 경우
             player_names = self._extract_player_names_from_sql(sql)
+            print(f"🔍 추출된 선수명: {player_names}")
             if player_names:
+                print(f"✅ 특정 선수 데이터 조회로 진행")
                 return self._get_specific_players_data(player_names)
             
             # 팀별 선수 조회
             team_code = self._extract_team_code_from_sql(sql)
+            print(f"🔍 추출된 팀 코드: {team_code}")
             if team_code:
+                print(f"✅ 팀별 선수 데이터 조회로 진행")
                 return self._get_team_players_data(team_code)
             
             # 포지션별 선수 조회
             position = self._extract_position_from_sql(sql)
+            print(f"🔍 추출된 포지션: {position}")
             if position:
+                print(f"✅ 포지션별 선수 데이터 조회로 진행")
                 return self._get_position_players_data(position)
             
             # 통계 기준 상위 선수 조회
             stat_field = self._extract_stat_field_from_sql(sql)
+            print(f"🔍 추출된 통계 필드: {stat_field}")
             if stat_field:
+                print(f"✅ 상위 선수 데이터 조회로 진행")
                 return self._get_top_players_by_stat(stat_field, sql)
             
-            # 기본: 모든 선수 조회
-            return self._get_all_players_data()
+            # 기본: 모든 선수 조회 (제한 없이)
+            print(f"✅ 모든 선수 데이터 조회로 진행")
+            return self._get_all_players_data_unlimited()
             
         except Exception as e:
             print(f"❌ 선수 데이터 조회 오류: {e}")
             return []
     
     def _extract_player_names_from_sql(self, sql: str) -> list:
-        """SQL에서 선수명 추출"""
-        # 일반적인 선수명들
-        common_players = [
-            "문동주", "이정후", "김하성", "류현진", "오승환", "최지만", 
-            "박건우", "김현수", "양의지", "김재환", "이승엽", "박병호",
-            "강백호", "이정후", "김하성", "문동주", "류현진", "오승환"
-        ]
+        """SQL에서 선수명 추출 (팀 코드 제외)"""
+        import re
         
-        found_players = []
-        for player in common_players:
-            if player in sql:
-                found_players.append(player)
+        # 팀 코드 목록 (선수명이 아닌 것들)
+        team_codes = {'HH', 'OB', 'HT', 'WO', 'LT', 'SS', 'SK', 'KT', 'NC', 'LG'}
         
-        return found_players
+        # SQL에서 player_name = '선수명' 패턴 찾기
+        pattern1 = r"player_name\s*=\s*['\"]([^'\"]+)['\"]"
+        matches1 = re.findall(pattern1, sql, re.IGNORECASE)
+        
+        # SQL에서 player_name IN ('선수명1', '선수명2') 패턴 찾기
+        pattern2 = r"player_name\s+IN\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)"
+        matches2 = re.findall(pattern2, sql, re.IGNORECASE)
+        
+        # SQL에서 player_name IN ('선수명1', '선수명2', ...) 패턴 찾기 (더 일반적인 패턴)
+        pattern3 = r"IN\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)"
+        matches3 = re.findall(pattern3, sql, re.IGNORECASE)
+        
+        all_matches = []
+        all_matches.extend(matches1)
+        
+        # matches2와 matches3에서 튜플을 풀어서 추가
+        for match in matches2:
+            all_matches.extend(match)
+        for match in matches3:
+            all_matches.extend(match)
+        
+        # 팀 코드가 아닌 실제 선수명만 필터링
+        player_names = [name for name in all_matches if name.upper() not in team_codes]
+        
+        print(f"🔍 선수명 추출 패턴1 (단일): {matches1}")
+        print(f"🔍 선수명 추출 패턴2 (IN 2개): {matches2}")
+        print(f"🔍 선수명 추출 패턴3 (IN 일반): {matches3}")
+        print(f"🔍 팀 코드 필터링 전: {all_matches}")
+        print(f"🔍 팀 코드 필터링 후: {player_names}")
+        
+        return player_names
     
     def _extract_team_code_from_sql(self, sql: str) -> str:
         """SQL에서 팀 코드 추출"""
@@ -585,9 +815,22 @@ SQL:""")
         try:
             all_data = []
             for player_name in player_names:
+                print(f"🔍 선수 '{player_name}' 데이터 조회 중...")
                 player_data = self.supabase.get_player_complete_data(player_name)
                 if player_data:
+                    print(f"✅ 선수 '{player_name}' 데이터 조회 성공:")
+                    print(f"   - 팀: {player_data.get('team', 'N/A')}")
+                    print(f"   - 포지션: {player_data.get('position', 'N/A')}")
+                    if player_data.get('record', {}).get('season'):
+                        season_data = player_data['record']['season'][0]
+                        print(f"   - 2025 시즌 성적:")
+                        print(f"     * 승수: {season_data.get('w', 'N/A')}")
+                        print(f"     * 패수: {season_data.get('l', 'N/A')}")
+                        print(f"     * ERA: {season_data.get('era', 'N/A')}")
+                        print(f"     * WAR: {season_data.get('war', 'N/A')}")
                     all_data.append(player_data)
+                else:
+                    print(f"❌ 선수 '{player_name}' 데이터를 찾을 수 없습니다.")
             return all_data
         except Exception as e:
             print(f"❌ 특정 선수 데이터 조회 오류: {e}")
@@ -656,6 +899,20 @@ SQL:""")
             players = self.supabase.get_all_players()
             all_data = []
             for player in players[:50]:  # 최대 50명만
+                player_data = self.supabase.get_player_complete_data(player['player_name'])
+                if player_data:
+                    all_data.append(player_data)
+            return all_data
+        except Exception as e:
+            print(f"❌ 모든 선수 데이터 조회 오류: {e}")
+            return []
+    
+    def _get_all_players_data_unlimited(self) -> list:
+        """모든 선수 데이터 조회 (제한 없음)"""
+        try:
+            players = self.supabase.get_all_players()
+            all_data = []
+            for player in players:  # 제한 없이 모든 선수
                 player_data = self.supabase.get_player_complete_data(player['player_name'])
                 if player_data:
                     all_data.append(player_data)
@@ -905,8 +1162,8 @@ SQL:""")
             print(f"🔍 analyze_results 호출 - 데이터 개수: {len(data) if data else 0}개")
             
             if not data:
-                print("❌ 데이터가 없어서 '해당 질문에 대한 데이터를 찾을 수 없습니다.' 반환")
-                return "해당 질문에 대한 데이터를 찾을 수 없습니다."
+                print("❌ 데이터가 없어서 적절한 응답 반환")
+                return self._get_no_data_response(question)
             
             # 데이터를 컨텍스트로 변환
             context = json.dumps(data, ensure_ascii=False, indent=2)
@@ -920,6 +1177,18 @@ SQL:""")
         except Exception as e:
             print(f"❌ 결과 분석 오류: {e}")
             return f"데이터 분석 중 오류가 발생했습니다: {str(e)}"
+    
+    def _get_no_data_response(self, question: str) -> str:
+        """데이터를 찾을 수 없을 때의 응답 생성"""
+        if "vs" in question.lower() or "대" in question or "비교" in question:
+            return """죄송합니다. 해당 질문에 대한 정확한 데이터를 데이터베이스에서 찾을 수 없습니다.
+
+더 나은 서비스를 제공할 수 있도록 노력하겠습니다. 
+- 선수명이 정확한지 확인해주세요
+- 다른 질문으로 다시 시도해주세요
+- 문의사항이 있으시면 언제든 말씀해주세요"""
+        else:
+            return "해당 질문에 대한 데이터를 찾을 수 없습니다."
     
     def _create_analysis_prompt(self, question: str, context: str) -> str:
         """질문 유형에 따른 분석 프롬프트 생성"""
@@ -980,6 +1249,8 @@ SQL:""")
 4. 한국어로 친근하게 답변하세요
 5. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
 6. 순위나 비교 질문인 경우 명확한 순위를 제시하세요
+7. ⚠️ 중요: 데이터베이스에서 조회된 실제 데이터만 사용하세요. 추측이나 가정하지 마세요.
+8. ⚠️ 중요: 선수명을 정확히 사용하세요. 다른 선수와 혼동하지 마세요.
 
 답변:"""
         
@@ -1028,38 +1299,68 @@ def main():
     try:
         text_to_sql = TextToSQL()
         
-        # 테스트 질문들
+        # 테스트 질문들 (모든 질문 유형 포함)
         test_questions = [
+            # 기본 질문들
             "한화 투수 중에 가장 잘하는 투수가 누구야?",
             "KBO 타자 중 타율이 가장 높은 선수는?",
             "문동주 선수 성적이 어때?",
-            "오늘 경기 일정",  # 원본 문제
-            "내일 한화 경기 일정이 뭐야?",
-            "3월 8일 한화 경기 결과가 어때?",
-            "한화 vs 두산 경기 결과 알려줘",
-            "어제 경기 결과",
-            "다음주 토요일 경기 일정",
-            "이번주 금요일 한화 경기",
-            "3일 후 경기 일정",
-            "9월 18일 경기 결과",
-            "2025-09-18 경기 일정",
-            # 새로운 경기 일정 관련 질문들
+            "오늘 경기 일정",
+            
+            # 경기 일정 관련 (10개)
+            "내일 한화 경기 일정 알려줘",
             "한화 앞으로 남은 경기 일정",
-            "앞으로 남은 경기들",
-            "이번 달 경기 일정",
+            "이번 주 경기 일정",
             "9월 경기 일정",
-            "한화 9월 경기 일정",
-            "이번 시즌 경기 일정",
-            "2025년 모든 경기",
-            "한화 다음 경기",
-            "한화 최근 경기",
-            "한화 홈 경기",
-            "한화 원정 경기",
-            "잠실 경기 일정",
+            "한화 홈 경기 일정",
             "주말 경기 일정",
-            "주중 경기 일정",
+            "다음주 토요일 경기",
+            "잠실 경기 일정",
+            "한화 vs 두산 경기 언제야?",
+            "한화 다음 경기 상대는 누구야?",
+            
+            # 경기 결과 관련 (8개)
+            "어제 경기 결과",
             "한화 vs 두산 경기 결과",
-            "최근 한화 경기 결과"
+            "최근 한화 경기 결과",
+            "3월 8일 경기 결과",
+            "한화 이번 시즌 전적",
+            "한화 승률이 어때?",
+            "한화 몇승 몇패야?",
+            "한화 순위가 몇 위야?",
+            
+            # 선수 성적 관련 (7개)
+            "문동주 선수 성적이 어때?",
+            "한화 타자 중에 가장 잘하는 선수가 누구야?",
+            "KBO 타율 1위는 누구야?",
+            "한화 투수 중에 가장 잘하는 투수가 누구야?",
+            "이정후 선수 요즘 어때?",
+            "한화 홈런 1위는 누구야?",
+            "한화 ERA 1위 투수는 누구야?",
+            
+            # 팀 통계 관련 (5개)
+            "한화 팀 타율이 어때?",
+            "한화 팀 홈런 개수",
+            "한화 팀 ERA",
+            "한화 팀 순위",
+            "한화 팀 승률",
+            
+            # 세부 질문들
+            "한화 원정 경기 일정",
+            "한화 홈 경기만 보여줘",
+            "이번 달 한화 경기 몇 개야?",
+            "한화 선발투수는 누구야?",
+            "한화 마무리투수는 누구야?",
+            "한화 4번타자는 누구야?",
+            "고척 경기 일정",
+            "각 팀 홈구장 알려줘",
+            
+            # 시즌 통계 관련
+            "한화 이번 시즌 홈런 개수",
+            "한화 이번 시즌 타점",
+            "한화 이번 시즌 도루",
+            "한화 이번 시즌 완봉",
+            "한화 이번 시즌 세이브"
         ]
         
         for question in test_questions:
