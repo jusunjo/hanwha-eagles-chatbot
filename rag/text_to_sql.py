@@ -134,6 +134,11 @@ SQL:""")
             sql = re.sub(r'```\s*', '', sql)
             sql = sql.strip()
             
+            # 설명 텍스트가 포함된 경우 SQL만 추출
+            sql_match = re.search(r'SELECT.*?;', sql, re.DOTALL | re.IGNORECASE)
+            if sql_match:
+                sql = sql_match.group(0).strip()
+            
             # 잘못된 필드명 자동 수정
             sql = re.sub(r'battingAverage', 'hra', sql, flags=re.IGNORECASE)
             sql = re.sub(r'\bavg\b', 'hra', sql, flags=re.IGNORECASE)
@@ -245,9 +250,15 @@ SQL:""")
                             # player_info에서 선수 정보 조회
                             player_info_result = self.supabase.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
                             
+                            print(f"📊 {player_name} 선수 데이터 조회 결과: {len(player_info_result.data) if player_info_result.data else 0}개")
+                            
                             if player_info_result.data:
                                 joined_data.extend(player_info_result.data)
+                                print(f"✅ {player_name} 선수 데이터 추가 완료")
+                            else:
+                                print(f"❌ {player_name} 선수 데이터를 찾을 수 없음")
                         
+                        print(f"📋 총 조회된 선수 데이터: {len(joined_data)}개")
                         return joined_data
                         
             except Exception as e:
@@ -493,7 +504,10 @@ SQL:""")
     def analyze_results(self, question: str, data: list) -> str:
         """조회 결과를 분석해서 답변 생성"""
         try:
+            print(f"🔍 analyze_results 호출 - 데이터 개수: {len(data) if data else 0}개")
+            
             if not data:
+                print("❌ 데이터가 없어서 '해당 질문에 대한 데이터를 찾을 수 없습니다.' 반환")
                 return "해당 질문에 대한 데이터를 찾을 수 없습니다."
             
             # 데이터를 컨텍스트로 변환
