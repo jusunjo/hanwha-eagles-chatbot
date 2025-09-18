@@ -85,11 +85,23 @@ class TextToSQL:
 3. 타율 필드명:
    - 타율은 "hra" 필드만 사용 (절대 "avg", "battingAverage" 사용 금지)
 
-4. 새로운 정규화된 테이블 구조:
+4. game_schedule 테이블 구조 (실제 컬럼들):
+   - game_id, super_category_id, category_id, category_name
+   - game_date, game_date_time, time_tbd, stadium, title
+   - home_team_code, home_team_name, home_team_score
+   - away_team_code, away_team_name, away_team_score
+   - winner, status_code, status_num, status_info
+   - cancel, suspended, has_video, round_code, reversed_home_away
+   - home_team_emblem_url, away_team_emblem_url, game_on_air, widget_enable
+   - special_match_info, series_outcome
+   - home_starter_name, away_starter_name, win_pitcher_name, lose_pitcher_name
+   - home_current_pitcher_name, away_current_pitcher_name, series_game_no
+   - broad_channel, round_name, round_game_no, created_at, updated_at
+
+5. 다른 테이블 구조:
    - players: id, player_name, pcode, team, position
    - player_season_stats: player_id, player_name, gyear, team, hra, hr, rbi, era, w, l, kk, whip 등
    - player_game_stats: player_id, player_name, gameId, gday, opponent, hra, hr, rbi, era, w, l 등
-   - game_schedule: date, home_team, away_team, home_team_code, away_team_code, stadium, time
 
 질문: {question}
 
@@ -117,16 +129,29 @@ ORDER BY s.era ASC
 LIMIT 10;
 
 내일 경기 일정 조회:
-SELECT date, home_team, away_team, stadium, time
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time
 FROM game_schedule 
-WHERE date = '2025-01-15'
-ORDER BY time;
+WHERE game_date = '2025-03-09'
+ORDER BY game_date_time;
 
 한화 내일 경기 상대 조회:
-SELECT home_team, away_team, stadium, time
+SELECT home_team_name, away_team_name, stadium, game_date_time, home_team_score, away_team_score
 FROM game_schedule 
-WHERE date = '2025-01-15' 
+WHERE game_date = '2025-03-09' 
 AND (home_team_code = 'HH' OR away_team_code = 'HH');
+
+경기 결과 조회 (완료된 경기):
+SELECT home_team_name, away_team_name, home_team_score, away_team_score, winner, status_info
+FROM game_schedule 
+WHERE status_code = 'RESULT' AND game_date = '2025-03-08'
+ORDER BY game_date_time;
+
+특정 팀 경기 일정 조회:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
+AND game_date >= '2025-03-01'
+ORDER BY game_date, game_date_time;
 
 SQL:""")
             
@@ -174,7 +199,7 @@ SQL:""")
             print(f"❌ SQL 생성 오류: {e}")
             return ""
     
-    def execute_sql(self, sql: str) -> list:
+    def execute_sql(self, sql: str, question: str = "") -> list:
         """SQL 실행 (새로운 테이블 구조 기반)"""
         try:
             # 간단한 SELECT 쿼리만 지원
@@ -183,7 +208,7 @@ SQL:""")
             
             # game_schedule 테이블 조회
             if "game_schedule" in sql.lower():
-                return self._get_game_schedule_data(sql)
+                return self._get_game_schedule_data(sql, question)
             
             # 새로운 테이블 구조 기반 데이터 조회
             return self._query_normalized_tables(sql)
@@ -384,7 +409,7 @@ SQL:""")
             print(f"❌ 모든 선수 데이터 조회 오류: {e}")
             return []
     
-    def _get_game_schedule_data(self, sql: str) -> list:
+    def _get_game_schedule_data(self, sql: str, question: str = "") -> list:
         """경기 일정 데이터 조회"""
         try:
             from datetime import datetime, date, timedelta
@@ -395,18 +420,28 @@ SQL:""")
             if not result.data:
                 return []
             
-            # 내일 경기 필터링
-            tomorrow = date.today() + timedelta(days=1)
-            tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+            # 원본 질문에서 날짜 조건 추출
+            target_date = self._extract_date_from_question(question)
             
-            # 내일 경기만 필터링
-            filtered_games = [
-                game for game in result.data 
-                if game.get('date', '').startswith(tomorrow_str)
-            ]
+            # 날짜 필터링
+            if target_date:
+                filtered_games = [
+                    game for game in result.data 
+                    if game.get('game_date', '').startswith(target_date)
+                ]
+                print(f"📅 {target_date} 경기 조회: {len(filtered_games)}개")
+            else:
+                # 기본적으로 내일 경기 필터링
+                tomorrow = date.today() + timedelta(days=1)
+                tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+                filtered_games = [
+                    game for game in result.data 
+                    if game.get('game_date', '').startswith(tomorrow_str)
+                ]
+                print(f"📅 내일 경기 조회: {len(filtered_games)}개")
             
             # 한화 관련 질문인지 확인
-            is_hanwha_question = any(keyword in sql.lower() for keyword in ['한화', 'hh', '누구랑', '누구와', '상대'])
+            is_hanwha_question = any(keyword in question.lower() for keyword in ['한화', 'hh', '누구랑', '누구와', '상대'])
             
             if is_hanwha_question:
                 # 한화 경기만 필터링
@@ -414,15 +449,181 @@ SQL:""")
                     game for game in filtered_games 
                     if game.get('home_team_code') == 'HH' or game.get('away_team_code') == 'HH'
                 ]
-                print(f"📅 내일 한화 경기 조회: {len(hanwha_games)}개")
+                print(f"📅 한화 경기 조회: {len(hanwha_games)}개")
                 return hanwha_games
             else:
-                print(f"📅 내일 경기 일정 조회: {len(filtered_games)}개")
                 return filtered_games
             
         except Exception as e:
             print(f"❌ 경기 일정 조회 오류: {e}")
             return []
+    
+    def _extract_date_from_question(self, question: str) -> str:
+        """원본 질문에서 날짜 추출 - 다양한 날짜 표현 지원"""
+        import re
+        from datetime import date, timedelta, datetime
+        
+        if not question:
+            return None
+        
+        question_lower = question.lower()
+        today = date.today()
+        
+        # 1. 명시적 날짜 패턴들
+        date_patterns = [
+            # YYYY-MM-DD 형식
+            r'(\d{4}-\d{1,2}-\d{1,2})',
+            # YYYY/MM/DD 형식  
+            r'(\d{4}/\d{1,2}/\d{1,2})',
+            # YYYY.MM.DD 형식
+            r'(\d{4}\.\d{1,2}\.\d{1,2})',
+            # MM/DD 형식 (현재 연도)
+            r'(\d{1,2}/\d{1,2})(?![0-9])',
+            # MM-DD 형식 (현재 연도)
+            r'(\d{1,2}-\d{1,2})(?![0-9])',
+            # MM월 DD일 형식
+            r'(\d{1,2})월\s*(\d{1,2})일',
+            # YYYY년 MM월 DD일 형식
+            r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일',
+        ]
+        
+        for i, pattern in enumerate(date_patterns):
+            match = re.search(pattern, question)
+            if match:
+                if i == 5:  # MM월 DD일 형식
+                    month, day = match.groups()
+                    current_year = today.year
+                    return f"{current_year}-{month.zfill(2)}-{day.zfill(2)}"
+                elif i == 6:  # YYYY년 MM월 DD일 형식
+                    year, month, day = match.groups()
+                    return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                else:
+                    date_str = match.group(1)
+                    # MM/DD 또는 MM-DD 형식인 경우 현재 연도 추가
+                    if ('/' in date_str or '-' in date_str) and len(date_str.split('/' if '/' in date_str else '-')) == 2:
+                        separator = '/' if '/' in date_str else '-'
+                        month, day = date_str.split(separator)
+                        current_year = today.year
+                        date_str = f"{current_year}-{month.zfill(2)}-{day.zfill(2)}"
+                    return date_str
+        
+        # 2. 상대적 날짜 표현들
+        relative_dates = {
+            # 오늘 관련
+            '오늘': 0, 'today': 0, '금일': 0,
+            
+            # 어제 관련  
+            '어제': -1, 'yesterday': -1, '전일': -1,
+            
+            # 내일 관련
+            '내일': 1, 'tomorrow': 1, '명일': 1,
+            
+            # 이번 주 관련
+            '이번주': 0, '이번 주': 0, 'this week': 0,
+            '이번주 월요일': self._get_weekday_offset(today, 0),  # 월요일
+            '이번주 화요일': self._get_weekday_offset(today, 1),  # 화요일
+            '이번주 수요일': self._get_weekday_offset(today, 2),  # 수요일
+            '이번주 목요일': self._get_weekday_offset(today, 3),  # 목요일
+            '이번주 금요일': self._get_weekday_offset(today, 4),  # 금요일
+            '이번주 토요일': self._get_weekday_offset(today, 5),  # 토요일
+            '이번주 일요일': self._get_weekday_offset(today, 6),  # 일요일
+            
+            # 다음 주 관련
+            '다음주': 7, '다음 주': 7, 'next week': 7,
+            '다음주 월요일': self._get_weekday_offset(today, 7),  # 다음주 월요일
+            '다음주 화요일': self._get_weekday_offset(today, 8),  # 다음주 화요일
+            '다음주 수요일': self._get_weekday_offset(today, 9),  # 다음주 수요일
+            '다음주 목요일': self._get_weekday_offset(today, 10), # 다음주 목요일
+            '다음주 금요일': self._get_weekday_offset(today, 11), # 다음주 금요일
+            '다음주 토요일': self._get_weekday_offset(today, 12), # 다음주 토요일
+            '다음주 일요일': self._get_weekday_offset(today, 13), # 다음주 일요일
+            
+            # 지난 주 관련
+            '지난주': -7, '지난 주': -7, 'last week': -7,
+            '지난주 월요일': self._get_weekday_offset(today, -7),  # 지난주 월요일
+            '지난주 화요일': self._get_weekday_offset(today, -6),  # 지난주 화요일
+            '지난주 수요일': self._get_weekday_offset(today, -5),  # 지난주 수요일
+            '지난주 목요일': self._get_weekday_offset(today, -4),  # 지난주 목요일
+            '지난주 금요일': self._get_weekday_offset(today, -3),  # 지난주 금요일
+            '지난주 토요일': self._get_weekday_offset(today, -2),  # 지난주 토요일
+            '지난주 일요일': self._get_weekday_offset(today, -1),  # 지난주 일요일
+        }
+        
+        # 상대적 날짜 키워드 검색
+        for keyword, days_offset in relative_dates.items():
+            if keyword in question_lower:
+                if isinstance(days_offset, int):
+                    target_date = today + timedelta(days=days_offset)
+                    return target_date.strftime("%Y-%m-%d")
+                else:
+                    return days_offset  # 이미 계산된 날짜
+        
+        # 3. 숫자 + 일/날/일자 표현
+        day_patterns = [
+            r'(\d+)일\s*후',  # N일 후
+            r'(\d+)일\s*전',  # N일 전
+            r'(\d+)일\s*뒤',  # N일 뒤
+            r'(\d+)일\s*앞',  # N일 앞
+            r'(\d+)일\s*지나면',  # N일 지나면
+        ]
+        
+        for pattern in day_patterns:
+            match = re.search(pattern, question)
+            if match:
+                days = int(match.group(1))
+                if '후' in pattern or '뒤' in pattern or '지나면' in pattern:
+                    target_date = today + timedelta(days=days)
+                else:  # 전, 앞
+                    target_date = today - timedelta(days=days)
+                return target_date.strftime("%Y-%m-%d")
+        
+        # 4. 요일 표현 (이번 주, 다음 주)
+        weekdays = {
+            '월요일': 0, '화요일': 1, '수요일': 2, '목요일': 3,
+            '금요일': 4, '토요일': 5, '일요일': 6,
+            'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+            'friday': 4, 'saturday': 5, 'sunday': 6
+        }
+        
+        for weekday, weekday_num in weekdays.items():
+            if weekday in question_lower:
+                # 이번 주인지 다음 주인지 확인
+                if '다음' in question_lower or 'next' in question_lower:
+                    days_ahead = weekday_num - today.weekday()
+                    if days_ahead <= 0:  # 다음 주
+                        days_ahead += 7
+                    target_date = today + timedelta(days=days_ahead)
+                else:  # 이번 주
+                    days_ahead = weekday_num - today.weekday()
+                    if days_ahead < 0:  # 이번 주가 지났으면 다음 주
+                        days_ahead += 7
+                    target_date = today + timedelta(days=days_ahead)
+                return target_date.strftime("%Y-%m-%d")
+        
+        # 5. 특정 월/일 표현
+        month_patterns = [
+            r'(\d{1,2})월\s*(\d{1,2})일',  # MM월 DD일
+            r'(\d{1,2})월\s*(\d{1,2})',    # MM월 DD
+        ]
+        
+        for pattern in month_patterns:
+            match = re.search(pattern, question)
+            if match:
+                month, day = match.groups()
+                current_year = today.year
+                return f"{current_year}-{month.zfill(2)}-{day.zfill(2)}"
+        
+        return None
+    
+    def _get_weekday_offset(self, base_date, target_weekday: int) -> str:
+        """특정 요일의 날짜 계산"""
+        from datetime import timedelta, date
+        
+        days_ahead = target_weekday - base_date.weekday()
+        if days_ahead < 0:  # 이번 주가 지났으면
+            days_ahead += 7
+        target_date = base_date + timedelta(days=days_ahead)
+        return target_date.strftime("%Y-%m-%d")
     
     def analyze_results(self, question: str, data: list) -> str:
         """조회 결과를 분석해서 답변 생성"""
@@ -471,9 +672,15 @@ SQL:""")
 
 답변 규칙:
 1. 경기 일정을 명확하고 읽기 쉽게 정리해서 보여주세요
-2. 경기 시간, 경기장, 홈팀 vs 원정팀 정보를 포함하세요
-3. 한국어로 친근하게 답변하세요
-4. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
+2. 경기 정보를 다음 순서로 포함하세요:
+   - 경기 날짜 (game_date)
+   - 경기 시간 (game_date_time)
+   - 홈팀 vs 원정팀 (home_team_name vs away_team_name)
+   - 경기장 (stadium)
+   - 경기 상태 (status_info) - 완료된 경기인 경우 점수도 포함
+3. 완료된 경기인 경우 승부 결과와 점수를 명확히 표시하세요
+4. 한국어로 친근하게 답변하세요
+5. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
 
 답변:"""
         
@@ -523,8 +730,8 @@ SQL:""")
             if not sql:
                 return "SQL 생성에 실패했습니다."
             
-            # SQL 실행
-            data = self.execute_sql(sql)
+            # SQL 실행 (원본 질문 전달)
+            data = self.execute_sql(sql, question)
             
             # 결과 분석
             answer = self.analyze_results(question, data)
@@ -546,7 +753,16 @@ def main():
             "한화 투수 중에 가장 잘하는 투수가 누구야?",
             "KBO 타자 중 타율이 가장 높은 선수는?",
             "문동주 선수 성적이 어때?",
-            "내일 한화 경기 일정이 뭐야?"
+            "오늘 경기 일정",  # 원본 문제
+            "내일 한화 경기 일정이 뭐야?",
+            "3월 8일 한화 경기 결과가 어때?",
+            "한화 vs 두산 경기 결과 알려줘",
+            "어제 경기 결과",
+            "다음주 토요일 경기 일정",
+            "이번주 금요일 한화 경기",
+            "3일 후 경기 일정",
+            "9월 18일 경기 결과",
+            "2025-09-18 경기 일정"
         ]
         
         for question in test_questions:
