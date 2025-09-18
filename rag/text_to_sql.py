@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-KBO 챗봇 Text-to-SQL 기능 구현
+새로운 정규화된 테이블 구조를 사용하는 KBO 챗봇 Text-to-SQL 기능 구현
 """
 
 import os
@@ -80,49 +80,53 @@ class TextToSQL:
 
 2. 선수명은 그대로 사용하세요:
    - "문동주", "이정후", "김하성" 등 선수명은 팀 코드로 변환하지 마세요
-   - 선수명은 pcode.playerName 또는 player_info.playerName에서 직접 검색
+   - 선수명은 players.player_name에서 직접 검색
 
 3. 타율 필드명:
    - 타율은 "hra" 필드만 사용 (절대 "avg", "battingAverage" 사용 금지)
 
-4. 시즌 데이터:
-   - record.season은 JSON 배열이므로 WHERE에서 직접 비교하지 마세요
-
-데이터베이스 스키마:
-- player_info 테이블: playerName, pcode, team, record, basicRecord
-- game_schedule 테이블: game_id, game_date, game_date_time, stadium, home_team_code, home_team_name, away_team_code, away_team_name, status_code, status_info, home_team_score, away_team_score, winner
-- game_result 테이블: team_id, team_name, year, ranking, win_game_count, lose_game_count, wra
+4. 새로운 정규화된 테이블 구조:
+   - players: id, player_name, pcode, team, position
+   - player_season_stats: player_id, player_name, gyear, team, hra, hr, rbi, era, w, l, kk, whip 등
+   - player_game_stats: player_id, player_name, gameId, gday, opponent, hra, hr, rbi, era, w, l 등
+   - game_schedule: date, home_team, away_team, home_team_code, away_team_code, stadium, time
 
 질문: {question}
 
 올바른 SQL 예시:
 한화 타자 순위 조회:
-SELECT playerName, record 
-FROM player_info 
-WHERE team = 'HH' 
+SELECT p.player_name, p.team, s.hra, s.hr, s.rbi 
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.team = 'HH' AND s.gyear = '2025'
+ORDER BY s.hra DESC
 LIMIT 5;
 
 특정 선수 성적 조회 (문동주):
-SELECT playerName, record 
-FROM player_info 
-WHERE playerName = '문동주';
+SELECT p.player_name, s.hra, s.hr, s.rbi, s.ab
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.player_name = '문동주' AND s.gyear = '2025';
+
+투수 ERA 순위 조회:
+SELECT p.player_name, p.team, s.era, s.w, s.l, s.kk
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE s.gyear = '2025' AND s.era IS NOT NULL
+ORDER BY s.era ASC
+LIMIT 10;
 
 내일 경기 일정 조회:
-SELECT game_date, game_date_time, stadium, home_team_name, away_team_name, status_info
+SELECT date, home_team, away_team, stadium, time
 FROM game_schedule 
-WHERE DATE(game_date) = DATE(NOW() + INTERVAL 1 DAY)
-ORDER BY game_date_time;
+WHERE date = '2025-01-15'
+ORDER BY time;
 
 한화 내일 경기 상대 조회:
-SELECT home_team_name, away_team_name, game_date_time, stadium
+SELECT home_team, away_team, stadium, time
 FROM game_schedule 
-WHERE DATE(game_date) = DATE(NOW() + INTERVAL 1 DAY) 
+WHERE date = '2025-01-15' 
 AND (home_team_code = 'HH' OR away_team_code = 'HH');
-
-한화 팀 순위 조회:
-SELECT team_name, ranking, win_game_count, lose_game_count, wra 
-FROM game_result 
-WHERE team_id = 'HH' AND year = 2025;
 
 SQL:""")
             
@@ -144,40 +148,14 @@ SQL:""")
             sql = re.sub(r'\bavg\b', 'hra', sql, flags=re.IGNORECASE)
             
             # 정규식으로 팀명 수정 (더 강력함)
-            sql = re.sub(r"= '한화'", "= 'HH'", sql)
-            sql = re.sub(r"= '두산'", "= 'OB'", sql)
-            sql = re.sub(r"= 'KIA'", "= 'HT'", sql)
-            sql = re.sub(r"= '키움'", "= 'WO'", sql)
-            sql = re.sub(r"= '롯데'", "= 'LT'", sql)
-            sql = re.sub(r"= '삼성'", "= 'SS'", sql)
-            sql = re.sub(r"= 'SSG'", "= 'SK'", sql)
-            sql = re.sub(r"= 'KT'", "= 'KT'", sql)
-            sql = re.sub(r"= 'NC'", "= 'NC'", sql)
-            sql = re.sub(r"= 'LG'", "= 'LG'", sql)
-            
-            # 잘못된 팀명 자동 수정 (더 강력한 패턴)
             team_mappings = {
-                "'한화'": "'HH'", 
-                "'두산'": "'OB'", 
-                "'KIA'": "'HT'", 
-                "'키움'": "'WO'",
-                "'롯데'": "'LT'", 
-                "'삼성'": "'SS'", 
-                "'SSG'": "'SK'", 
-                "'KT'": "'KT'",
-                "'NC'": "'NC'", 
-                "'LG'": "'LG'",
+                "'한화'": "'HH'", "'두산'": "'OB'", "'KIA'": "'HT'", "'키움'": "'WO'",
+                "'롯데'": "'LT'", "'삼성'": "'SS'", "'SSG'": "'SK'", "'KT'": "'KT'",
+                "'NC'": "'NC'", "'LG'": "'LG'",
                 # 따옴표 없는 경우도 처리
-                "한화": "HH",
-                "두산": "OB", 
-                "KIA": "HT",
-                "키움": "WO",
-                "롯데": "LT",
-                "삼성": "SS",
-                "SSG": "SK",
-                "KT": "KT",
-                "NC": "NC",
-                "LG": "LG"
+                "한화": "HH", "두산": "OB", "KIA": "HT", "키움": "WO",
+                "롯데": "LT", "삼성": "SS", "SSG": "SK", "KT": "KT",
+                "NC": "NC", "LG": "LG"
             }
             
             print(f"🔧 SQL 수정 전: {sql}")
@@ -197,7 +175,7 @@ SQL:""")
             return ""
     
     def execute_sql(self, sql: str) -> list:
-        """SQL 실행 (수동 데이터 조회 사용)"""
+        """SQL 실행 (새로운 테이블 구조 기반)"""
         try:
             # 간단한 SELECT 쿼리만 지원
             if not sql.upper().startswith('SELECT'):
@@ -207,212 +185,203 @@ SQL:""")
             if "game_schedule" in sql.lower():
                 return self._get_game_schedule_data(sql)
             
-            # game_result 테이블 조회
-            if "game_result" in sql.lower():
-                return self._get_team_stats_data(sql)
-            
-            # Supabase RPC 함수가 없으므로 직접 수동 데이터 조회 사용
-            return self._manual_data_query(sql)
+            # 새로운 테이블 구조 기반 데이터 조회
+            return self._query_normalized_tables(sql)
                 
         except Exception as e:
             print(f"❌ 데이터 조회 오류: {e}")
             return []
     
-    def _manual_data_query(self, sql: str) -> list:
-        """수동으로 데이터 조회 (RPC가 없을 때)"""
+    def _query_normalized_tables(self, sql: str) -> list:
+        """정규화된 테이블에서 데이터 조회"""
         try:
-            # 투수 데이터 조회
-            if "투수" in sql or "pitcher" in sql.lower():
-                return self._get_kbo_pitchers()
+            # SQL에서 테이블과 조건 파악
+            sql_lower = sql.lower()
             
-            # 타자 데이터 조회
-            if "타자" in sql or "hitter" in sql.lower():
-                return self._get_kbo_hitters()
+            # 선수 관련 질문인지 확인
+            if any(table in sql_lower for table in ['players', 'player_season_stats', 'player_game_stats']):
+                return self._query_player_data(sql)
             
-            # 선수명이 포함된 질문인지 확인하고 직접 player_info에서 조회
-            # player_info에서 모든 선수명을 가져와서 SQL에 포함된 선수명 찾기
-            try:
-                all_players = self.supabase.supabase.table("player_info").select("playerName").execute()
-                
-                if all_players.data:
-                    player_names = [player["playerName"] for player in all_players.data]
-                    
-                    # SQL에 포함된 선수명 찾기
-                    found_players = [name for name in player_names if name in sql]
-                    
-                    if found_players:
-                        # 찾은 선수들의 정보를 player_info에서 조회
-                        print(f"🔍 선수명 발견: {found_players} - player_info에서 조회")
-                        
-                        # 각 선수에 대해 player_info에서 데이터 조회
-                        joined_data = []
-                        for player_name in found_players:
-                            # player_info에서 선수 정보 조회
-                            player_info_result = self.supabase.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
-                            
-                            print(f"📊 {player_name} 선수 데이터 조회 결과: {len(player_info_result.data) if player_info_result.data else 0}개")
-                            
-                            if player_info_result.data:
-                                joined_data.extend(player_info_result.data)
-                                print(f"✅ {player_name} 선수 데이터 추가 완료")
-                            else:
-                                print(f"❌ {player_name} 선수 데이터를 찾을 수 없음")
-                        
-                        print(f"📋 총 조회된 선수 데이터: {len(joined_data)}개")
-                        return joined_data
-                        
-            except Exception as e:
-                print(f"⚠️ 선수명 조회 중 오류: {e}")
-                # 오류 발생 시 기존 로직으로 진행
+            # 경기 일정 관련 질문
+            if 'game_schedule' in sql_lower:
+                return self._get_game_schedule_data(sql)
             
-            # 특정 팀 선수 조회 (팀명이 명시적으로 언급된 경우만)
-            team_keywords = {
-                "한화": "HH", "두산": "OB", "KIA": "HT", "키움": "WO", 
-                "롯데": "LT", "삼성": "SS", "SSG": "SK", "KT": "KT", 
-                "NC": "NC", "LG": "LG"
-            }
-            
-            for team_name, team_code in team_keywords.items():
-                if team_name in sql or team_code in sql:
-                    return self._get_team_players(team_code, team_name)
-            
-            # 일반 선수 데이터 조회 (모든 KBO 팀)
-            result = self.supabase.supabase.table("player_info").select("*").execute()
-            return result.data if result.data else []
+            return []
             
         except Exception as e:
-            print(f"❌ 수동 데이터 조회 오류: {e}")
+            print(f"❌ 정규화된 테이블 조회 오류: {e}")
             return []
     
-    def _get_kbo_pitchers(self) -> list:
-        """KBO 투수 데이터 조회"""
+    def _query_player_data(self, sql: str) -> list:
+        """선수 데이터 조회"""
         try:
-            # player_info에서 모든 KBO 선수들 조회
-            kbo_players = self.supabase.supabase.table('player_info').select('*').execute()
+            sql_lower = sql.lower()
             
-            kbo_pitchers = []
-            for player in kbo_players.data:
-                data = player
-                player_name = data.get('playerName', '')
-                record = data.get('record', {})
-                if 'season' in record:
-                    # 2025년 시즌 데이터 찾기
-                    for season in record['season']:
-                        if season.get('gyear') == '2025':
-                            # 투수 데이터인지 확인 (ERA가 있으면 투수)
-                            if season.get('era') and season.get('era') != 'N/A':
-                                kbo_pitchers.append({
-                                    'playerName': player_name,
-                                    'team': season.get('team', ''),
-                                    'era': season.get('era'),
-                                    'w': season.get('w'),
-                                    'l': season.get('l'),
-                                    'kk': season.get('kk'),
-                                    'whip': season.get('whip'),
-                                    'gyear': '2025'
-                                })
-                                break
+            # 특정 선수명이 포함된 경우
+            player_names = self._extract_player_names_from_sql(sql)
+            if player_names:
+                return self._get_specific_players_data(player_names)
             
-            return kbo_pitchers
+            # 팀별 선수 조회
+            team_code = self._extract_team_code_from_sql(sql)
+            if team_code:
+                return self._get_team_players_data(team_code)
+            
+            # 포지션별 선수 조회
+            position = self._extract_position_from_sql(sql)
+            if position:
+                return self._get_position_players_data(position)
+            
+            # 통계 기준 상위 선수 조회
+            stat_field = self._extract_stat_field_from_sql(sql)
+            if stat_field:
+                return self._get_top_players_by_stat(stat_field, sql)
+            
+            # 기본: 모든 선수 조회
+            return self._get_all_players_data()
             
         except Exception as e:
-            print(f"❌ KBO 투수 데이터 조회 오류: {e}")
+            print(f"❌ 선수 데이터 조회 오류: {e}")
             return []
     
-    def _get_kbo_hitters(self) -> list:
-        """KBO 타자 데이터 조회"""
+    def _extract_player_names_from_sql(self, sql: str) -> list:
+        """SQL에서 선수명 추출"""
+        # 일반적인 선수명들
+        common_players = [
+            "문동주", "이정후", "김하성", "류현진", "오승환", "최지만", 
+            "박건우", "김현수", "양의지", "김재환", "이승엽", "박병호",
+            "강백호", "이정후", "김하성", "문동주", "류현진", "오승환"
+        ]
+        
+        found_players = []
+        for player in common_players:
+            if player in sql:
+                found_players.append(player)
+        
+        return found_players
+    
+    def _extract_team_code_from_sql(self, sql: str) -> str:
+        """SQL에서 팀 코드 추출"""
+        team_mappings = {
+            "한화": "HH", "두산": "OB", "KIA": "HT", "키움": "WO",
+            "롯데": "LT", "삼성": "SS", "SSG": "SK", "KT": "KT",
+            "NC": "NC", "LG": "LG"
+        }
+        
+        for team_name, team_code in team_mappings.items():
+            if team_name in sql or f"'{team_code}'" in sql:
+                return team_code
+        
+        return None
+    
+    def _extract_position_from_sql(self, sql: str) -> str:
+        """SQL에서 포지션 추출"""
+        if "투수" in sql or "pitcher" in sql.lower():
+            return "투수"
+        elif "타자" in sql or "hitter" in sql.lower():
+            return "타자"
+        elif "포수" in sql or "catcher" in sql.lower():
+            return "포수"
+        
+        return None
+    
+    def _extract_stat_field_from_sql(self, sql: str) -> str:
+        """SQL에서 통계 필드 추출"""
+        stat_mappings = {
+            "타율": "hra", "홈런": "hr", "타점": "rbi", "안타": "hit",
+            "출루율": "obp", "장타율": "slg", "OPS": "ops",
+            "ERA": "era", "WHIP": "whip", "승수": "w", "패수": "l",
+            "삼진": "kk", "세이브": "sv", "홀드": "hold"
+        }
+        
+        for stat_name, stat_field in stat_mappings.items():
+            if stat_name in sql or stat_field in sql.lower():
+                return stat_field
+        
+        return None
+    
+    def _get_specific_players_data(self, player_names: list) -> list:
+        """특정 선수들의 데이터 조회"""
         try:
-            # player_info에서 모든 KBO 선수들 조회
-            kbo_players = self.supabase.supabase.table('player_info').select('*').execute()
-            
-            kbo_hitters = []
-            for player in kbo_players.data:
-                data = player
-                player_name = data.get('playerName', '')
-                record = data.get('record', {})
-                if 'season' in record:
-                    # 2025년 시즌 데이터 찾기
-                    for season in record['season']:
-                        if season.get('gyear') == '2025':
-                            # 타자 데이터인지 확인 (hra가 있으면 타자)
-                            if season.get('hra') and season.get('hra') != 'N/A':
-                                kbo_hitters.append({
-                                    'playerName': player_name,
-                                    'team': season.get('team', ''),
-                                    'hra': season.get('hra'),  # 타율
-                                    'hr': season.get('hr'),    # 홈런
-                                    'rbi': season.get('rbi'),  # 타점
-                                    'hit': season.get('hit'),  # 안타
-                                    'ab': season.get('ab'),    # 타석
-                                    'obp': season.get('obp'),  # 출루율
-                                    'slg': season.get('slg'),  # 장타율
-                                    'ops': season.get('ops'),  # OPS
-                                    'gyear': '2025'
-                                })
-                                break
-            
-            return kbo_hitters
-            
+            all_data = []
+            for player_name in player_names:
+                player_data = self.supabase.get_player_complete_data(player_name)
+                if player_data:
+                    all_data.append(player_data)
+            return all_data
         except Exception as e:
-            print(f"❌ KBO 타자 데이터 조회 오류: {e}")
+            print(f"❌ 특정 선수 데이터 조회 오류: {e}")
             return []
     
-    def _get_team_players(self, team_code: str, team_name: str) -> list:
-        """특정 팀 선수 데이터 조회 (투수 + 타자)"""
+    def _get_team_players_data(self, team_code: str) -> list:
+        """팀별 선수 데이터 조회"""
         try:
-            # player_info에서 해당 팀 선수들만 조회
-            team_players = self.supabase.supabase.table('player_info').select('*').eq('team', team_code).execute()
-            
-            all_team_players = []
-            for player in team_players.data:
-                data = player
-                player_name = data.get('playerName', '')
-                record = data.get('record', {})
-                basic_record = data.get('basicRecord', {})
-                
-                player_data = {
-                    'playerName': player_name,
-                        'team': team_code,
-                        'teamName': team_name,
-                        'position': basic_record.get('position', ''),
-                        'gyear': '2025'
-                    }
-                    
-                if 'season' in record:
-                    # 2025년 시즌 데이터 찾기
-                    for season in record['season']:
-                        if season.get('gyear') == '2025':
-                            # 투수 데이터 (ERA가 있으면)
-                            if season.get('era') and season.get('era') != 'N/A':
-                                player_data.update({
-                                    'type': 'pitcher',
-                                    'era': season.get('era'),
-                                    'w': season.get('w'),
-                                    'l': season.get('l'),
-                                    'kk': season.get('kk'),
-                                    'whip': season.get('whip')
-                                })
-                            # 타자 데이터 (hra가 있으면)
-                            elif season.get('hra') and season.get('hra') != 'N/A':
-                                player_data.update({
-                                    'type': 'hitter',
-                                    'hra': season.get('hra'),  # 타율
-                                    'hr': season.get('hr'),    # 홈런
-                                    'rbi': season.get('rbi'),  # 타점
-                                    'hit': season.get('hit'),  # 안타
-                                    'ab': season.get('ab'),    # 타석
-                                    'obp': season.get('obp'),  # 출루율
-                                    'slg': season.get('slg'),  # 장타율
-                                    'ops': season.get('ops')   # OPS
-                                })
-                            break
-                    
-                    all_team_players.append(player_data)
-            
-            return all_team_players
-            
+            players = self.supabase.get_players_by_team(team_code)
+            all_data = []
+            for player in players:
+                player_data = self.supabase.get_player_complete_data(player['player_name'])
+                if player_data:
+                    all_data.append(player_data)
+            return all_data
         except Exception as e:
-            print(f"❌ {team_name} 선수 데이터 조회 오류: {e}")
+            print(f"❌ 팀별 선수 데이터 조회 오류: {e}")
+            return []
+    
+    def _get_position_players_data(self, position: str) -> list:
+        """포지션별 선수 데이터 조회"""
+        try:
+            players = self.supabase.get_players_by_position(position)
+            all_data = []
+            for player in players:
+                player_data = self.supabase.get_player_complete_data(player['player_name'])
+                if player_data:
+                    all_data.append(player_data)
+            return all_data
+        except Exception as e:
+            print(f"❌ 포지션별 선수 데이터 조회 오류: {e}")
+            return []
+    
+    def _get_top_players_by_stat(self, stat_field: str, sql: str) -> list:
+        """통계 기준 상위 선수 조회"""
+        try:
+            # SQL에서 포지션과 팀 필터 추출
+            position = self._extract_position_from_sql(sql)
+            team_code = self._extract_team_code_from_sql(sql)
+            
+            # 상위 10명 조회
+            top_players = self.supabase.get_top_players_by_stat(
+                stat_field=stat_field,
+                position=position,
+                team=team_code,
+                limit=10
+            )
+            
+            # 완전한 데이터로 변환
+            all_data = []
+            for player_stat in top_players:
+                if 'players' in player_stat:
+                    player_name = player_stat['players']['player_name']
+                    player_data = self.supabase.get_player_complete_data(player_name)
+                    if player_data:
+                        all_data.append(player_data)
+            
+            return all_data
+        except Exception as e:
+            print(f"❌ 상위 선수 조회 오류: {e}")
+            return []
+    
+    def _get_all_players_data(self) -> list:
+        """모든 선수 데이터 조회"""
+        try:
+            players = self.supabase.get_all_players()
+            all_data = []
+            for player in players[:50]:  # 최대 50명만
+                player_data = self.supabase.get_player_complete_data(player['player_name'])
+                if player_data:
+                    all_data.append(player_data)
+            return all_data
+        except Exception as e:
+            print(f"❌ 모든 선수 데이터 조회 오류: {e}")
             return []
     
     def _get_game_schedule_data(self, sql: str) -> list:
@@ -433,7 +402,7 @@ SQL:""")
             # 내일 경기만 필터링
             filtered_games = [
                 game for game in result.data 
-                if game.get('game_date', '').startswith(tomorrow_str)
+                if game.get('date', '').startswith(tomorrow_str)
             ]
             
             # 한화 관련 질문인지 확인
@@ -455,52 +424,6 @@ SQL:""")
             print(f"❌ 경기 일정 조회 오류: {e}")
             return []
     
-
-    def _get_team_stats_data(self, sql: str) -> list:
-        """팀 통계 데이터 조회"""
-        try:
-            # game_result 테이블에서 모든 데이터 조회
-            result = self.supabase.supabase.table("game_result").select("*").execute()
-            
-            if not result.data:
-                return []
-            
-            # SQL에서 팀 필터링이 있는지 확인
-            team_keywords = {
-                "한화": "HH", "두산": "OB", "KIA": "HT", "키움": "WO", 
-                "롯데": "LT", "삼성": "SS", "SSG": "SK", "KT": "KT", 
-                "NC": "NC", "LG": "LG"
-            }
-            
-            filtered_data = result.data
-            
-            # 특정 팀의 데이터만 필터링
-            for team_name, team_code in team_keywords.items():
-                if team_name in sql or team_code in sql:
-                    filtered_data = [
-                        team for team in result.data 
-                        if team.get('team_id') == team_code
-                    ]
-                    break
-            
-            # 2025년 데이터만 필터링
-            filtered_data = [
-                team for team in filtered_data 
-                if team.get('year') == 2025
-            ]
-            
-            # 순위순 정렬 (랭킹이 있는 경우)
-            if any(keyword in sql.lower() for keyword in ['순위', 'ranking', 'rank']):
-                filtered_data.sort(key=lambda x: x.get('ranking', 999))
-            
-            print(f"📊 팀 통계 데이터 조회: {len(filtered_data)}개")
-            
-            return filtered_data
-            
-        except Exception as e:
-            print(f"❌ 팀 통계 데이터 조회 오류: {e}")
-            return []
-    
     def analyze_results(self, question: str, data: list) -> str:
         """조회 결과를 분석해서 답변 생성"""
         try:
@@ -513,30 +436,32 @@ SQL:""")
             # 데이터를 컨텍스트로 변환
             context = json.dumps(data, ensure_ascii=False, indent=2)
             
-            # 경기 일정 관련 질문인지 확인
-            is_schedule_question = any(keyword in question for keyword in [
-                "경기 일정", "일정", "경기", "내일", "오늘", "어제", "다음", "이번 주",
-                "경기표", "스케줄", "대진표", "경기 시간", "경기장", "구장"
-            ])
+            # 질문 유형별 프롬프트 생성
+            prompt = self._create_analysis_prompt(question, context)
             
-            # 팀 통계 관련 질문인지 확인
-            is_team_stats_question = any(keyword in question for keyword in [
-                "몇승", "승수", "승리수", "몇패", "패수", "패배수", "승률", "순위",
-                "이번 시즌", "시즌", "현재", "지금", "몇위", "등수", "랭킹",
-                "타율", "홈런", "타점", "안타", "출루율", "장타율", "OPS",
-                "ERA", "WHIP", "세이브", "홀드", "완투", "퀄리티스타트"
-            ])
+            response = self.llm.invoke(prompt)
+            return response.content
             
-            # 선수 성적 관련 질문인지 확인
-            is_player_stats_question = any(keyword in question for keyword in [
-                "성적", "어때", "어떻게", "요즘", "최근", "지금", "현재",
-                "투수", "타자", "선수", "선발", "구원", "마무리"
-            ]) and any(keyword in question for keyword in [
-                "문동주", "이정후", "김하성", "류현진", "오승환", "최지만", "박건우", "김현수"
-            ])
-            
-            if is_schedule_question:
-                prompt = ChatPromptTemplate.from_template("""
+        except Exception as e:
+            print(f"❌ 결과 분석 오류: {e}")
+            return f"데이터 분석 중 오류가 발생했습니다: {str(e)}"
+    
+    def _create_analysis_prompt(self, question: str, context: str) -> str:
+        """질문 유형에 따른 분석 프롬프트 생성"""
+        # 경기 일정 관련 질문인지 확인
+        is_schedule_question = any(keyword in question for keyword in [
+            "경기 일정", "일정", "경기", "내일", "오늘", "어제", "다음", "이번 주",
+            "경기표", "스케줄", "대진표", "경기 시간", "경기장", "구장"
+        ])
+        
+        # 선수 성적 관련 질문인지 확인
+        is_player_stats_question = any(keyword in question for keyword in [
+            "성적", "어때", "어떻게", "요즘", "최근", "지금", "현재",
+            "투수", "타자", "선수", "선발", "구원", "마무리", "순위", "최고", "가장"
+        ])
+        
+        if is_schedule_question:
+            return f"""
 당신은 KBO 전문 분석가입니다. 다음 경기 일정 데이터를 바탕으로 사용자의 질문에 답변해주세요.
 
 질문: {question}
@@ -550,26 +475,10 @@ SQL:""")
 3. 한국어로 친근하게 답변하세요
 4. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
 
-답변:""")
-            elif is_team_stats_question:
-                prompt = ChatPromptTemplate.from_template("""
-당신은 KBO 전문 분석가입니다. 다음 팀 통계 데이터를 바탕으로 사용자의 질문에 답변해주세요.
-
-질문: {question}
-
-팀 통계 데이터:
-{context}
-
-답변 규칙:
-1. 팀 통계를 명확하고 읽기 쉽게 정리해서 보여주세요
-2. 순위, 승수, 패수, 승률, 타율, 홈런, ERA 등 구체적인 수치를 포함하세요
-3. 한국어로 친근하게 답변하세요
-4. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
-5. 팀명은 정확히 표시하세요
-
-답변:""")
-            elif is_player_stats_question:
-                prompt = ChatPromptTemplate.from_template("""
+답변:"""
+        
+        elif is_player_stats_question:
+            return f"""
 당신은 KBO 전문 분석가입니다. 다음 선수 성적 데이터를 바탕으로 사용자의 질문에 답변해주세요.
 
 질문: {question}
@@ -578,16 +487,17 @@ SQL:""")
 {context}
 
 답변 규칙:
-1. 선수의 최근 성적을 명확하고 읽기 쉽게 정리해서 보여주세요
-2. 2025년 시즌 성적을 우선적으로 보여주고, 통산 성적도 참고하세요
-3. ERA, 승수, 패수, WHIP, 삼진수, 이닝수 등 구체적인 수치를 포함하세요
+1. 선수의 성적을 명확하고 읽기 쉽게 정리해서 보여주세요
+2. 2025년 시즌 성적을 우선적으로 보여주세요
+3. 구체적인 수치(타율, 홈런, 타점, ERA, 승수, 패수 등)를 포함하세요
 4. 한국어로 친근하게 답변하세요
 5. 야구 팬이 쉽게 이해할 수 있도록 설명하세요
-6. 선수명은 정확히 표시하세요
+6. 순위나 비교 질문인 경우 명확한 순위를 제시하세요
 
-답변:""")
-            else:
-                prompt = ChatPromptTemplate.from_template("""
+답변:"""
+        
+        else:
+            return f"""
 당신은 KBO 전문 분석가입니다. 다음 데이터를 바탕으로 사용자의 질문에 답변해주세요.
 
 질문: {question}
@@ -601,14 +511,7 @@ SQL:""")
 3. 한국어로 친근하게 답변하세요
 4. 야구 팬의 관점에서 재미있게 설명하세요
 
-답변:""")
-            
-            response = self.llm.invoke(prompt.format(question=question, context=context))
-            return response.content
-            
-        except Exception as e:
-            print(f"❌ 결과 분석 오류: {e}")
-            return f"데이터 분석 중 오류가 발생했습니다: {str(e)}"
+답변:"""
     
     def process_question(self, question: str) -> str:
         """질문을 Text-to-SQL로 처리"""
@@ -640,9 +543,10 @@ def main():
         
         # 테스트 질문들
         test_questions = [
-            "KBO 투수 중에 가장 잘하는 투수가 누구야?",
-            "KBO 투수 중 ERA가 가장 낮은 투수는?",
-            "KBO 투수 중 승수가 가장 많은 투수는?"
+            "한화 투수 중에 가장 잘하는 투수가 누구야?",
+            "KBO 타자 중 타율이 가장 높은 선수는?",
+            "문동주 선수 성적이 어때?",
+            "내일 한화 경기 일정이 뭐야?"
         ]
         
         for question in test_questions:

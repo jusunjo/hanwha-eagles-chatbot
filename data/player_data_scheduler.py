@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-선수 데이터 수집 스케줄러
-매일 밤 11시 59분에 pcode 테이블의 모든 선수 데이터를 수집하여 player_info 테이블에 저장
+새로운 정규화된 테이블 구조를 사용하는 선수 데이터 수집 스케줄러
+매일 밤 11시 59분에 players 테이블의 모든 선수 데이터를 수집하여 
+player_season_stats와 player_game_stats 테이블에 저장
 """
 
 import os
@@ -37,21 +38,21 @@ class PlayerDataScheduler:
             print(f"❌ Supabase 연결 실패: {e}")
             raise e
     
-    def get_all_players_from_player_info(self) -> List[Dict[str, Any]]:
-        """player_info 테이블에서 모든 선수 조회"""
+    def get_all_players_from_players_table(self) -> List[Dict[str, Any]]:
+        """players 테이블에서 모든 선수 조회"""
         try:
-            print("🔍 player_info 테이블에서 모든 선수 조회 중...")
-            result = self.supabase.supabase.table("player_info").select("*").execute()
+            print("🔍 players 테이블에서 모든 선수 조회 중...")
+            result = self.supabase.supabase.table("players").select("*").execute()
             
             if result.data:
                 print(f"✅ {len(result.data)}명의 선수 조회 완료")
                 return result.data
             else:
-                print("❌ player_info 테이블에 선수 데이터가 없습니다.")
+                print("❌ players 테이블에 선수 데이터가 없습니다.")
                 return []
                 
         except Exception as e:
-            print(f"❌ player_info 테이블 조회 오류: {e}")
+            print(f"❌ players 테이블 조회 오류: {e}")
             return []
     
     def fetch_player_data_from_api(self, player_name: str, pcode: str) -> Dict[str, Any]:
@@ -95,11 +96,9 @@ class PlayerDataScheduler:
         """HTML에서 선수 데이터 추출"""
         try:
             player_data = {
-                "playerName": player_name,
-                "record": {},
-                "chart": {},
-                "vsTeam": {},
-                "basicRecord": {}
+                "player_name": player_name,
+                "season_stats": [],
+                "game_stats": []
             }
             
             # 기본 기록 추출 (basicRecord)
@@ -109,7 +108,7 @@ class PlayerDataScheduler:
                 try:
                     basic_record_str = basic_match.group(1) + "}"
                     basic_record = json.loads(basic_record_str)
-                    player_data["basicRecord"] = basic_record
+                    player_data["basic_record"] = basic_record
                 except:
                     pass
             
@@ -120,7 +119,7 @@ class PlayerDataScheduler:
                 try:
                     season_str = season_match.group(1)
                     season_data = json.loads(season_str)
-                    player_data["record"]["season"] = season_data
+                    player_data["season_stats"] = season_data
                 except:
                     pass
             
@@ -131,38 +130,14 @@ class PlayerDataScheduler:
                 try:
                     game_str = game_match.group(1)
                     game_data = json.loads(game_str)
-                    player_data["record"]["game"] = game_data
-                except:
-                    pass
-            
-            # 차트 데이터 추출 (chart)
-            chart_pattern = r'"chart":\s*({[^}]+})'
-            chart_match = re.search(chart_pattern, html_content)
-            if chart_match:
-                try:
-                    chart_str = chart_match.group(1) + "}"
-                    chart_data = json.loads(chart_str)
-                    player_data["chart"] = chart_data
-                except:
-                    pass
-            
-            # VS 팀 데이터 추출 (vsTeam)
-            vsteam_pattern = r'"vsteam":\s*(\[[^\]]+\])'
-            vsteam_match = re.search(vsteam_pattern, html_content)
-            if vsteam_match:
-                try:
-                    vsteam_str = vsteam_match.group(1)
-                    vsteam_data = json.loads(vsteam_str)
-                    player_data["vsTeam"] = vsteam_data
+                    player_data["game_stats"] = game_data
                 except:
                     pass
             
             print(f"📊 {player_name} 추출된 데이터:")
-            print(f"   - basicRecord: {'있음' if player_data['basicRecord'] else '없음'}")
-            print(f"   - season: {'있음' if player_data['record'].get('season') else '없음'}")
-            print(f"   - game: {'있음' if player_data['record'].get('game') else '없음'}")
-            print(f"   - chart: {'있음' if player_data['chart'] else '없음'}")
-            print(f"   - vsTeam: {'있음' if player_data['vsTeam'] else '없음'}")
+            print(f"   - season_stats: {len(player_data['season_stats'])}개")
+            print(f"   - game_stats: {len(player_data['game_stats'])}개")
+            print(f"   - basic_record: {'있음' if player_data.get('basic_record') else '없음'}")
             
             return player_data
             
@@ -170,39 +145,188 @@ class PlayerDataScheduler:
             print(f"❌ {player_name} HTML 파싱 오류: {e}")
             return None
     
-    def save_player_data_to_db(self, player_data: Dict[str, Any]) -> bool:
-        """선수 데이터를 player_info 테이블에 저장"""
+    def save_player_season_stats(self, player_id: int, player_name: str, season_stats: List[Dict[str, Any]]) -> bool:
+        """선수 시즌별 통계를 player_season_stats 테이블에 저장"""
         try:
-            player_name = player_data.get("playerName")
-            if not player_name:
-                print("❌ 선수 이름이 없습니다.")
-                return False
+            if not season_stats:
+                print(f"⚠️ {player_name} 시즌별 통계가 없습니다.")
+                return True
             
-            # 기존 데이터 확인
-            existing = self.supabase.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
+            # 기존 시즌별 통계 삭제
+            try:
+                self.supabase.supabase.table("player_season_stats").delete().eq("player_id", player_id).execute()
+                print(f"🗑️ {player_name} 기존 시즌별 통계 삭제 완료")
+            except Exception as e:
+                print(f"⚠️ {player_name} 기존 시즌별 통계 삭제 중 오류: {e}")
             
-            data_to_save = {
-                "playerName": player_name,
-                "record": player_data.get("record", {}),
-                "chart": player_data.get("chart", {}),
-                "vsTeam": player_data.get("vsTeam", {}),
-                "basicRecord": player_data.get("basicRecord", {})
-            }
+            # 새로운 시즌별 통계 삽입
+            stats_to_insert = []
+            for stat in season_stats:
+                # "통산" 데이터는 제외
+                if stat.get('gyear') == '통산':
+                    continue
+                
+                stat_data = {
+                    'player_id': player_id,
+                    'player_name': player_name,
+                    'gyear': stat.get('gyear', ''),
+                    'team': stat.get('team', ''),
+                    'gamenum': self._safe_convert_int(stat.get('gamenum')),
+                    'war': self._safe_convert_float(stat.get('war')),
+                    
+                    # 타자 통계
+                    'hra': self._safe_convert_float(stat.get('hra')),
+                    'ab': self._safe_convert_int(stat.get('ab')),
+                    'run': self._safe_convert_int(stat.get('run')),
+                    'hit': self._safe_convert_int(stat.get('hit')),
+                    'h2': self._safe_convert_int(stat.get('h2')),
+                    'h3': self._safe_convert_int(stat.get('h3')),
+                    'hr': self._safe_convert_int(stat.get('hr')),
+                    'tb': self._safe_convert_int(stat.get('tb')),
+                    'rbi': self._safe_convert_int(stat.get('rbi')),
+                    'sb': self._safe_convert_int(stat.get('sb')),
+                    'cs': self._safe_convert_int(stat.get('cs')),
+                    'sh': self._safe_convert_int(stat.get('sh')),
+                    'sf': self._safe_convert_int(stat.get('sf')),
+                    'bb': self._safe_convert_int(stat.get('bb')),
+                    'hp': self._safe_convert_int(stat.get('hp')),
+                    'kk': self._safe_convert_int(stat.get('kk')),
+                    'gd': self._safe_convert_int(stat.get('gd')),
+                    'err': self._safe_convert_int(stat.get('err')),
+                    'obp': self._safe_convert_float(stat.get('obp')),
+                    'slg': self._safe_convert_float(stat.get('slg')),
+                    'ops': self._safe_convert_float(stat.get('ops')),
+                    'isop': self._safe_convert_float(stat.get('isop')),
+                    'babip': self._safe_convert_float(stat.get('babip')),
+                    'wrcPlus': self._safe_convert_float(stat.get('wrcPlus')),
+                    'woba': self._safe_convert_float(stat.get('woba')),
+                    'wpa': self._safe_convert_float(stat.get('wpa')),
+                    'paFlag': self._safe_convert_int(stat.get('paFlag')),
+                    
+                    # 투수 통계
+                    'era': self._safe_convert_float(stat.get('era')),
+                    'w': self._safe_convert_int(stat.get('w')),
+                    'l': self._safe_convert_int(stat.get('l')),
+                    'sv': self._safe_convert_int(stat.get('sv')),
+                    'hold': self._safe_convert_int(stat.get('hold')),
+                    'cg': self._safe_convert_int(stat.get('cg')),
+                    'sho': self._safe_convert_int(stat.get('sho')),
+                    'bf': self._safe_convert_int(stat.get('bf')),
+                    'inn': stat.get('inn'),  # 이닝은 문자열 그대로
+                    'inn2': self._safe_convert_int(stat.get('inn2')),
+                    'r': self._safe_convert_int(stat.get('r')),
+                    'er': self._safe_convert_int(stat.get('er')),
+                    'whip': self._safe_convert_float(stat.get('whip')),
+                    'k9': self._safe_convert_float(stat.get('k9')),
+                    'bb9': self._safe_convert_float(stat.get('bb9')),
+                    'kbb': self._safe_convert_float(stat.get('kbb')),
+                    'qs': self._safe_convert_int(stat.get('qs')),
+                    'wra': self._safe_convert_float(stat.get('wra')),
+                }
+                
+                # None 값 제거
+                stat_data = {k: v for k, v in stat_data.items() if v is not None}
+                stats_to_insert.append(stat_data)
             
-            if existing.data:
-                # 기존 데이터 업데이트
-                result = self.supabase.supabase.table("player_info").update(data_to_save).eq("playerName", player_name).execute()
-                print(f"✅ {player_name} 선수 데이터 업데이트 완료")
+            if stats_to_insert:
+                result = self.supabase.supabase.table("player_season_stats").insert(stats_to_insert).execute()
+                print(f"✅ {player_name} 시즌별 통계 {len(stats_to_insert)}개 저장 완료")
+                return True
             else:
-                # 새 데이터 삽입
-                result = self.supabase.supabase.table("player_info").insert(data_to_save).execute()
-                print(f"✅ {player_name} 선수 데이터 저장 완료")
-            
-            return True
-            
+                print(f"⚠️ {player_name} 저장할 시즌별 통계가 없습니다.")
+                return True
+                
         except Exception as e:
-            print(f"❌ {player_name} 선수 데이터 저장 오류: {e}")
+            print(f"❌ {player_name} 시즌별 통계 저장 오류: {e}")
             return False
+    
+    def save_player_game_stats(self, player_id: int, player_name: str, game_stats: List[Dict[str, Any]]) -> bool:
+        """선수 경기별 통계를 player_game_stats 테이블에 저장"""
+        try:
+            if not game_stats:
+                print(f"⚠️ {player_name} 경기별 통계가 없습니다.")
+                return True
+            
+            # 기존 경기별 통계 삭제
+            try:
+                self.supabase.supabase.table("player_game_stats").delete().eq("player_id", player_id).execute()
+                print(f"🗑️ {player_name} 기존 경기별 통계 삭제 완료")
+            except Exception as e:
+                print(f"⚠️ {player_name} 기존 경기별 통계 삭제 중 오류: {e}")
+            
+            # 새로운 경기별 통계 삽입 (최근 10경기만)
+            stats_to_insert = []
+            for stat in game_stats[:10]:  # 최근 10경기만
+                stat_data = {
+                    'player_id': player_id,
+                    'player_name': player_name,
+                    'gameId': stat.get('gameId'),
+                    'gday': stat.get('gday'),
+                    'opponent': stat.get('opponent'),
+                    
+                    # 타자 통계
+                    'ab': self._safe_convert_int(stat.get('ab')),
+                    'run': self._safe_convert_int(stat.get('run')),
+                    'hit': self._safe_convert_int(stat.get('hit')),
+                    'h2': self._safe_convert_int(stat.get('h2')),
+                    'h3': self._safe_convert_int(stat.get('h3')),
+                    'hr': self._safe_convert_int(stat.get('hr')),
+                    'rbi': self._safe_convert_int(stat.get('rbi')),
+                    'sb': self._safe_convert_int(stat.get('sb')),
+                    'cs': self._safe_convert_int(stat.get('cs')),
+                    'bb': self._safe_convert_int(stat.get('bb')),
+                    'kk': self._safe_convert_int(stat.get('kk')),
+                    'hra': self._safe_convert_float(stat.get('hra')),
+                    'sf': self._safe_convert_int(stat.get('sf')),
+                    'sh': self._safe_convert_int(stat.get('sh')),
+                    'gd': self._safe_convert_int(stat.get('gd')),
+                    'dheader': stat.get('dheader'),
+                    
+                    # 투수 통계
+                    'inn': stat.get('inn'),  # 이닝은 문자열 그대로
+                    'er': self._safe_convert_int(stat.get('er')),
+                    'whip': self._safe_convert_float(stat.get('whip')),
+                    'hp': self._safe_convert_int(stat.get('hp')),
+                }
+                
+                # None 값 제거
+                stat_data = {k: v for k, v in stat_data.items() if v is not None}
+                stats_to_insert.append(stat_data)
+            
+            if stats_to_insert:
+                result = self.supabase.supabase.table("player_game_stats").insert(stats_to_insert).execute()
+                print(f"✅ {player_name} 경기별 통계 {len(stats_to_insert)}개 저장 완료")
+                return True
+            else:
+                print(f"⚠️ {player_name} 저장할 경기별 통계가 없습니다.")
+                return True
+                
+        except Exception as e:
+            print(f"❌ {player_name} 경기별 통계 저장 오류: {e}")
+            return False
+    
+    def _safe_convert_int(self, value, default=None):
+        """안전한 int 변환"""
+        if value is None or value == '':
+            return default
+        try:
+            if isinstance(value, str) and not value.replace('.', '').replace('-', '').isdigit():
+                return default
+            return int(float(value))
+        except (ValueError, TypeError):
+            return default
+    
+    def _safe_convert_float(self, value, default=None):
+        """안전한 float 변환"""
+        if value is None or value == '':
+            return default
+        try:
+            # 분수 형식이면 None 반환 (inn 필드가 아닌 경우)
+            if isinstance(value, str) and (' ' in value and '/' in value):
+                return default
+            return float(value)
+        except (ValueError, TypeError):
+            return default
     
     def collect_all_players_data(self):
         """모든 선수 데이터 수집 및 저장"""
@@ -211,8 +335,8 @@ class PlayerDataScheduler:
         print(f"⏰ 시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
-            # 1. player_info 테이블에서 모든 선수 조회
-            players = self.get_all_players_from_player_info()
+            # 1. players 테이블에서 모든 선수 조회
+            players = self.get_all_players_from_players_table()
             
             if not players:
                 print("❌ 수집할 선수가 없습니다.")
@@ -223,10 +347,11 @@ class PlayerDataScheduler:
             fail_count = 0
             
             for i, player in enumerate(players, 1):
-                player_name = player.get("playerName")
+                player_name = player.get("player_name")
                 pcode = player.get("pcode")
+                player_id = player.get("id")
                 
-                if not player_name or not pcode:
+                if not player_name or not pcode or not player_id:
                     print(f"❌ {i}/{len(players)}: 선수 정보가 불완전합니다. 건너뜁니다.")
                     fail_count += 1
                     continue
@@ -237,8 +362,17 @@ class PlayerDataScheduler:
                 player_data = self.fetch_player_data_from_api(player_name, pcode)
                 
                 if player_data:
-                    # DB에 저장
-                    if self.save_player_data_to_db(player_data):
+                    # 시즌별 통계 저장
+                    season_success = self.save_player_season_stats(
+                        player_id, player_name, player_data.get('season_stats', [])
+                    )
+                    
+                    # 경기별 통계 저장
+                    game_success = self.save_player_game_stats(
+                        player_id, player_name, player_data.get('game_stats', [])
+                    )
+                    
+                    if season_success and game_success:
                         success_count += 1
                         print(f"✅ {player_name} 완료")
                     else:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Supabase 클라이언트 관리
+새로운 정규화된 테이블 구조를 사용하는 Supabase 클라이언트 관리
 """
 
 import os
@@ -32,14 +32,30 @@ class SupabaseManager:
             raise e
     
     def create_tables(self) -> bool:
-        """필요한 테이블들이 존재하는지 확인하고 없으면 생성"""
+        """필요한 테이블들이 존재하는지 확인"""
         try:
-            # player_info 테이블 확인
+            # players 테이블 확인
             try:
-                self.supabase.table("player_info").select("id").limit(1).execute()
-                print("✅ player_info 테이블 존재 확인")
+                self.supabase.table("players").select("id").limit(1).execute()
+                print("✅ players 테이블 존재 확인")
             except:
-                print("❌ player_info 테이블이 존재하지 않습니다.")
+                print("❌ players 테이블이 존재하지 않습니다.")
+                return False
+            
+            # player_season_stats 테이블 확인
+            try:
+                self.supabase.table("player_season_stats").select("id").limit(1).execute()
+                print("✅ player_season_stats 테이블 존재 확인")
+            except:
+                print("❌ player_season_stats 테이블이 존재하지 않습니다.")
+                return False
+            
+            # player_game_stats 테이블 확인
+            try:
+                self.supabase.table("player_game_stats").select("id").limit(1).execute()
+                print("✅ player_game_stats 테이블 존재 확인")
+            except:
+                print("❌ player_game_stats 테이블이 존재하지 않습니다.")
                 return False
             
             # game_schedule 테이블 확인
@@ -53,69 +69,102 @@ class SupabaseManager:
             return True
             
         except Exception as e:
-            print(f"❌ 테이블 생성 오류: {e}")
+            print(f"❌ 테이블 확인 오류: {e}")
             return False
     
-    def save_player_data(self, player_data: Dict[str, Any]) -> bool:
-        """선수 데이터 저장"""
+    def get_player_basic_info(self, player_name: str) -> Optional[Dict[str, Any]]:
+        """선수 기본 정보 조회"""
         try:
-            player_name = player_data.get("playerName")
-            if not player_name:
-                print("❌ 선수 이름이 없습니다.")
-                return False
-            
-            # 기존 데이터 확인
-            existing = self.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
-            
-            data_to_save = {
-                "playerName": player_name,
-                "record": player_data.get("record", {}),
-                "chart": player_data.get("chart", {}),
-                "vsTeam": player_data.get("vsTeam", {}),
-                "basicRecord": player_data.get("basicRecord", {})
-            }
-            
-            if existing.data:
-                # 기존 데이터 업데이트
-                result = self.supabase.table("player_info").update(data_to_save).eq("playerName", player_name).execute()
-                print(f"✅ {player_name} 선수 데이터 업데이트 완료")
-            else:
-                # 새 데이터 삽입
-                result = self.supabase.table("player_info").insert(data_to_save).execute()
-                print(f"✅ {player_name} 선수 데이터 저장 완료")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ 선수 데이터 저장 오류: {e}")
-            return False
-    
-    def get_player_data(self, player_name: str) -> Optional[Dict[str, Any]]:
-        """선수 데이터 조회"""
-        try:
-            result = self.supabase.table("player_info").select("*").eq("playerName", player_name).execute()
+            result = self.supabase.table("players").select("*").eq("player_name", player_name).execute()
             
             if result.data:
-                player_data = result.data[0]
-                return {
-                    "playerName": player_data["playerName"],
-                    "record": player_data["record"],
-                    "chart": player_data["chart"],
-                    "vsTeam": player_data["vsTeam"],
-                    "basicRecord": player_data["basicRecord"]
-                }
+                return result.data[0]
             else:
-                print(f"❌ {player_name} 선수 데이터를 찾을 수 없습니다.")
+                print(f"❌ {player_name} 선수 기본 정보를 찾을 수 없습니다.")
                 return None
                 
         except Exception as e:
-            print(f"❌ 선수 데이터 조회 오류: {e}")
+            print(f"❌ 선수 기본 정보 조회 오류: {e}")
+            return None
+    
+    def get_player_season_stats(self, player_name: str = None, player_id: int = None, gyear: str = "2025") -> List[Dict[str, Any]]:
+        """선수 시즌별 통계 조회"""
+        try:
+            query = self.supabase.table("player_season_stats").select("*")
+            
+            if player_name:
+                query = query.eq("player_name", player_name)
+            elif player_id:
+                query = query.eq("player_id", player_id)
+            
+            if gyear:
+                query = query.eq("gyear", gyear)
+            
+            result = query.execute()
+            return result.data or []
+                
+        except Exception as e:
+            print(f"❌ 선수 시즌별 통계 조회 오류: {e}")
+            return []
+    
+    def get_player_game_stats(self, player_name: str = None, player_id: int = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """선수 경기별 통계 조회"""
+        try:
+            query = self.supabase.table("player_game_stats").select("*")
+            
+            if player_name:
+                query = query.eq("player_name", player_name)
+            elif player_id:
+                query = query.eq("player_id", player_id)
+            
+            query = query.order("created_at", desc=True).limit(limit)
+            result = query.execute()
+            return result.data or []
+                
+        except Exception as e:
+            print(f"❌ 선수 경기별 통계 조회 오류: {e}")
+            return []
+    
+    def get_player_complete_data(self, player_name: str) -> Optional[Dict[str, Any]]:
+        """선수의 모든 데이터를 통합해서 조회 (기존 player_info와 유사한 형태)"""
+        try:
+            # 1. 기본 정보 조회
+            basic_info = self.get_player_basic_info(player_name)
+            if not basic_info:
+                return None
+            
+            # 2. 시즌별 통계 조회
+            season_stats = self.get_player_season_stats(player_name=player_name)
+            
+            # 3. 경기별 통계 조회 (최근 10경기)
+            game_stats = self.get_player_game_stats(player_name=player_name, limit=10)
+            
+            # 4. 기존 player_info 형태로 데이터 구성
+            player_data = {
+                "player_name": basic_info["player_name"],
+                "pcode": basic_info["pcode"],
+                "team": basic_info["team"],
+                "position": basic_info["position"],
+                "record": {
+                    "season": season_stats
+                },
+                "game": game_stats,
+                "basicRecord": {
+                    "position": basic_info["position"],
+                    "team": basic_info["team"]
+                }
+            }
+            
+            return player_data
+                
+        except Exception as e:
+            print(f"❌ 선수 통합 데이터 조회 오류: {e}")
             return None
     
     def search_players(self, search_term: str) -> List[Dict[str, Any]]:
         """선수 검색"""
         try:
-            result = self.supabase.table("player_info").select("*").ilike("playerName", f"%{search_term}%").execute()
+            result = self.supabase.table("players").select("*").ilike("player_name", f"%{search_term}%").execute()
             return result.data or []
             
         except Exception as e:
@@ -123,24 +172,67 @@ class SupabaseManager:
             return []
     
     def get_all_players(self) -> List[Dict[str, Any]]:
-        """모든 선수 데이터 조회 (player_info 테이블에서)"""
+        """모든 선수 기본 정보 조회"""
         try:
-            result = self.supabase.table("player_info").select("*").execute()
+            result = self.supabase.table("players").select("*").execute()
             return result.data or []
             
         except Exception as e:
             print(f"❌ 모든 선수 데이터 조회 오류: {e}")
             return []
     
-    def get_player_mapping(self) -> Dict[str, str]:
-        """선수 매핑 정보 조회 (playerName -> pcode)"""
+    def get_players_by_team(self, team_code: str) -> List[Dict[str, Any]]:
+        """특정 팀의 선수들 조회"""
         try:
-            result = self.supabase.table("player_info").select("playerName, pcode").execute()
+            result = self.supabase.table("players").select("*").eq("team", team_code).execute()
+            return result.data or []
+            
+        except Exception as e:
+            print(f"❌ 팀별 선수 조회 오류: {e}")
+            return []
+    
+    def get_players_by_position(self, position: str) -> List[Dict[str, Any]]:
+        """특정 포지션의 선수들 조회"""
+        try:
+            result = self.supabase.table("players").select("*").eq("position", position).execute()
+            return result.data or []
+            
+        except Exception as e:
+            print(f"❌ 포지션별 선수 조회 오류: {e}")
+            return []
+    
+    def get_top_players_by_stat(self, stat_field: str, position: str = None, team: str = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """특정 통계 기준 상위 선수들 조회"""
+        try:
+            query = self.supabase.table("player_season_stats").select(f"*, players!inner(player_name, team, position)")
+            
+            if position:
+                query = query.eq("players.position", position)
+            if team:
+                query = query.eq("team", team)
+            
+            # 2025년 데이터만
+            query = query.eq("gyear", "2025")
+            
+            # 통계 필드로 정렬 (내림차순)
+            query = query.order(stat_field, desc=True).limit(limit)
+            
+            result = query.execute()
+            return result.data or []
+                
+        except Exception as e:
+            print(f"❌ 상위 선수 조회 오류: {e}")
+            return []
+    
+    def get_player_mapping(self) -> Dict[str, str]:
+        """선수 매핑 정보 조회 (player_name -> pcode)"""
+        try:
+            result = self.supabase.table("players").select("player_name, pcode").execute()
             
             if result.data:
                 mapping = {}
                 for player in result.data:
-                    player_name = player.get("playerName")
+                    player_name = player.get("player_name")
                     pcode = player.get("pcode")
                     if player_name and pcode:
                         mapping[player_name] = pcode
@@ -156,7 +248,7 @@ class SupabaseManager:
     def get_pcode_by_name(self, player_name: str) -> Optional[str]:
         """선수 이름으로 pcode 조회"""
         try:
-            result = self.supabase.table("player_info").select("pcode").eq("playerName", player_name).execute()
+            result = self.supabase.table("players").select("pcode").eq("player_name", player_name).execute()
             
             if result.data:
                 return result.data[0].get("pcode")
@@ -181,6 +273,7 @@ class SupabaseManager:
         except Exception as e:
             print(f"❌ 경기 일정 조회 오류: {e}")
             return []
+    
     def get_future_games(self) -> List[Dict[str, Any]]:
         """오늘 날짜 기준으로 미래 경기들만 조회"""
         try:
@@ -232,3 +325,14 @@ class SupabaseManager:
         except Exception as e:
             print(f"❌ 날짜 비교 오류: {e}")
             return False
+    
+    # 기존 player_info 호환성을 위한 메서드들
+    def get_player_data(self, player_name: str) -> Optional[Dict[str, Any]]:
+        """기존 호환성을 위한 메서드 (get_player_complete_data와 동일)"""
+        return self.get_player_complete_data(player_name)
+    
+    def save_player_data(self, player_data: Dict[str, Any]) -> bool:
+        """선수 데이터 저장 (새로운 구조에서는 사용하지 않음)"""
+        print("⚠️ 새로운 테이블 구조에서는 save_player_data를 사용하지 않습니다.")
+        print("   대신 create_tables_and_migrate.py를 사용하여 데이터를 마이그레이션하세요.")
+        return False
