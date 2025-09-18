@@ -225,9 +225,9 @@ SQL:""")
                 return self._get_kbo_hitters()
             
             # 선수명이 포함된 질문인지 확인하고 직접 player_info에서 조회
-            # pcode에서 모든 선수명을 가져와서 SQL에 포함된 선수명 찾기
+            # player_info에서 모든 선수명을 가져와서 SQL에 포함된 선수명 찾기
             try:
-                all_players = self.supabase.supabase.table("pcode").select("playerName").execute()
+                all_players = self.supabase.supabase.table("player_info").select("playerName").execute()
                 
                 if all_players.data:
                     player_names = [player["playerName"] for player in all_players.data]
