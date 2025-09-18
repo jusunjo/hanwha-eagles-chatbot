@@ -98,12 +98,28 @@ class TextToSQL:
    - home_current_pitcher_name, away_current_pitcher_name, series_game_no
    - broad_channel, round_name, round_game_no, created_at, updated_at
 
-5. 다른 테이블 구조:
-   - players: id, player_name, pcode, team, position
-   - player_season_stats: player_id, player_name, gyear, team, hra, hr, rbi, era, w, l, kk, whip 등
-   - player_game_stats: player_id, player_name, gameId, gday, opponent, hra, hr, rbi, era, w, l 등
+5. game_result 테이블 구조 (팀 순위 및 통계):
+   - team_id, team_name, season_id, year, ranking, order_no, wra (승률)
+   - game_count, win_game_count, drawn_game_count, lose_game_count, game_behind
+   - continuous_game_result, last_five_games
+   - 공격 통계: offense_hra, offense_run, offense_rbi, offense_ab, offense_hr, offense_hit, offense_h2, offense_h3, offense_sb, offense_bbhp, offense_kk, offense_gd, offense_obp, offense_slg, offense_ops
+   - 수비 통계: defense_era, defense_r, defense_er, defense_inning, defense_hit, defense_hr, defense_kk, defense_bbhp, defense_err, defense_whip, defense_qs, defense_save, defense_hold, defense_wp
+   - has_my_team, my_team_category_id, next_schedule_game_id, opposing_team_name, created_at, updated_at
 
-6. 경기 일정 관련 질문 처리 규칙:
+6. players 테이블 구조:
+   - id, player_name, pcode, team, position
+
+7. player_season_stats 테이블 구조 (시즌 통계):
+   - player_id, player_name, gyear, team, position
+   - 타격 통계: hra (타율), hr (홈런), rbi (타점), ab (타석), hit (안타), h2 (2루타), h3 (3루타), sb (도루), bbhp (볼넷+사구), kk (삼진), gd (병살타), obp (출루율), slg (장타율), ops (OPS)
+   - 투수 통계: era (평균자책점), w (승수), l (패수), sv (세이브), hold (홀드), wp (완투), qs (퀄리티스타트), whip (WHIP), kk (삼진), bbhp (볼넷+사구), er (자책점), r (실점), inning (이닝), hit (피안타), hr (피홈런), err (실책)
+
+8. player_game_stats 테이블 구조 (경기별 통계):
+   - player_id, player_name, gameId, gday, opponent, team, position
+   - 타격 통계: hra (타율), hr (홈런), rbi (타점), ab (타석), hit (안타), h2 (2루타), h3 (3루타), sb (도루), bbhp (볼넷+사구), kk (삼진), gd (병살타), obp (출루율), slg (장타율), ops (OPS)
+   - 투수 통계: era (평균자책점), w (승수), l (패수), sv (세이브), hold (홀드), wp (완투), qs (퀄리티스타트), whip (WHIP), kk (삼진), bbhp (볼넷+사구), er (자책점), r (실점), inning (이닝), hit (피안타), hr (피홈런), err (실책)
+
+9. 경기 일정 관련 질문 처리 규칙:
    - "앞으로 남은 경기", "남은 일정", "앞으로의 경기" → game_date >= 오늘 날짜
    - "이번 달", "이번 월", "9월", "10월" → 해당 월의 모든 경기
    - "이번 시즌", "올해", "2025년" → 2025년 모든 경기
@@ -112,6 +128,22 @@ class TextToSQL:
    - "홈 경기", "원정 경기" → home_team_code 또는 away_team_code로 구분
    - "경기장별", "구장별" → stadium으로 그룹화
    - "주말 경기", "주중 경기" → 요일로 구분 (토요일, 일요일 vs 월~금)
+
+10. 팀 순위 및 통계 관련 질문 처리 규칙:
+   - "순위", "랭킹", "몇 위", "등수" → game_result.ranking 사용
+   - "승률", "승수", "패수", "몇승", "몇패" → game_result.wra, win_game_count, lose_game_count 사용
+   - "팀 타율", "팀 홈런", "팀 ERA" → game_result.offense_hra, offense_hr, defense_era 사용
+   - "한화 순위", "한화 승률", "한화 전적" → team_id = 'HH'로 필터링
+   - "1위", "2위", "3위" → ranking = 1, 2, 3으로 필터링
+   - "상위권", "하위권" → ranking <= 5 (상위권), ranking >= 6 (하위권)
+
+11. 선수 성적 관련 질문 처리 규칙:
+   - "타율", "홈런", "타점", "안타", "출루율", "장타율", "OPS" → hra, hr, rbi, hit, obp, slg, ops 사용
+   - "ERA", "WHIP", "승수", "패수", "세이브", "홀드" → era, whip, w, l, sv, hold 사용
+   - "시즌 성적", "이번 시즌" → player_season_stats 테이블 사용
+   - "경기별 성적", "특정 경기" → player_game_stats 테이블 사용
+   - "한화 선수", "특정 팀 선수" → team 필드로 필터링
+   - "투수", "타자" → position 필드로 필터링
 
 질문: {question}
 
@@ -257,6 +289,121 @@ AND status_code = 'RESULT'
 ORDER BY game_date DESC
 LIMIT 5;
 
+=== 팀 순위 및 통계 관련 ===
+전체 팀 순위:
+SELECT team_name, ranking, wra, win_game_count, lose_game_count, game_behind
+FROM game_result 
+WHERE year = '2025'
+ORDER BY ranking;
+
+한화 순위 및 전적:
+SELECT team_name, ranking, wra, win_game_count, lose_game_count, game_behind, last_five_games
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 승률:
+SELECT team_name, wra, win_game_count, lose_game_count
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 팀 타율:
+SELECT team_name, offense_hra, offense_hr, offense_rbi, offense_ops
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+한화 팀 ERA:
+SELECT team_name, defense_era, defense_whip, defense_save, defense_hold
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+상위권 팀들 (1-5위):
+SELECT team_name, ranking, wra, win_game_count, lose_game_count
+FROM game_result 
+WHERE year = '2025' AND ranking <= 5
+ORDER BY ranking;
+
+하위권 팀들 (6위 이하):
+SELECT team_name, ranking, wra, win_game_count, lose_game_count
+FROM game_result 
+WHERE year = '2025' AND ranking >= 6
+ORDER BY ranking;
+
+팀 타율 순위:
+SELECT team_name, offense_hra, offense_hr, offense_rbi
+FROM game_result 
+WHERE year = '2025'
+ORDER BY offense_hra DESC;
+
+팀 ERA 순위:
+SELECT team_name, defense_era, defense_whip, defense_save
+FROM game_result 
+WHERE year = '2025'
+ORDER BY defense_era ASC;
+
+팀 홈런 순위:
+SELECT team_name, offense_hr, offense_rbi, offense_ops
+FROM game_result 
+WHERE year = '2025'
+ORDER BY offense_hr DESC;
+
+특정 순위 팀 (예: 1위):
+SELECT team_name, ranking, wra, win_game_count, lose_game_count, last_five_games
+FROM game_result 
+WHERE year = '2025' AND ranking = 1;
+
+=== 선수 성적 관련 ===
+한화 타자 시즌 성적 순위:
+SELECT p.player_name, s.hra, s.hr, s.rbi, s.hit, s.obp, s.slg, s.ops
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.team = 'HH' AND s.gyear = '2025' AND p.position != '투수'
+ORDER BY s.hra DESC
+LIMIT 10;
+
+한화 투수 시즌 성적 순위:
+SELECT p.player_name, s.era, s.w, s.l, s.sv, s.hold, s.whip, s.kk
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.team = 'HH' AND s.gyear = '2025' AND p.position = '투수'
+ORDER BY s.era ASC
+LIMIT 10;
+
+특정 선수 시즌 성적 (문동주):
+SELECT p.player_name, s.hra, s.hr, s.rbi, s.hit, s.ab, s.obp, s.slg, s.ops
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.player_name = '문동주' AND s.gyear = '2025';
+
+KBO 타율 1위:
+SELECT p.player_name, p.team, s.hra, s.hr, s.rbi, s.hit
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE s.gyear = '2025' AND p.position != '투수'
+ORDER BY s.hra DESC
+LIMIT 1;
+
+KBO ERA 1위 투수:
+SELECT p.player_name, p.team, s.era, s.w, s.l, s.sv, s.whip
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE s.gyear = '2025' AND p.position = '투수' AND s.era IS NOT NULL
+ORDER BY s.era ASC
+LIMIT 1;
+
+특정 경기 선수 성적:
+SELECT p.player_name, g.hra, g.hr, g.rbi, g.hit, g.opponent, g.gday
+FROM players p
+JOIN player_game_stats g ON p.id = g.player_id
+WHERE p.player_name = '문동주' AND g.gameId = '20250916HHHT02025';
+
+한화 홈런 1위:
+SELECT p.player_name, s.hr, s.rbi, s.hra, s.ops
+FROM players p
+JOIN player_season_stats s ON p.id = s.player_id
+WHERE p.team = 'HH' AND s.gyear = '2025' AND p.position != '투수'
+ORDER BY s.hr DESC
+LIMIT 1;
+
 SQL:""")
             
             response = self.llm.invoke(prompt.format(question=question))
@@ -313,6 +460,10 @@ SQL:""")
             # game_schedule 테이블 조회
             if "game_schedule" in sql.lower():
                 return self._get_game_schedule_data(sql, question)
+            
+            # game_result 테이블 조회
+            if "game_result" in sql.lower():
+                return self._get_game_result_data(sql)
             
             # 새로운 테이블 구조 기반 데이터 조회
             return self._query_normalized_tables(sql)
@@ -732,6 +883,22 @@ SQL:""")
         target_date = base_date + timedelta(days=days_ahead)
         return target_date.strftime("%Y-%m-%d")
     
+    def _get_game_result_data(self, sql: str) -> list:
+        """팀 순위 및 통계 데이터 조회"""
+        try:
+            # game_result 테이블에서 데이터 조회
+            result = self.supabase.supabase.table("game_result").select("*").execute()
+            
+            if not result.data:
+                return []
+            
+            print(f"📊 팀 순위 및 통계 조회: {len(result.data)}개")
+            return result.data
+            
+        except Exception as e:
+            print(f"❌ 팀 순위 및 통계 조회 오류: {e}")
+            return []
+    
     def analyze_results(self, question: str, data: list) -> str:
         """조회 결과를 분석해서 답변 생성"""
         try:
@@ -765,7 +932,13 @@ SQL:""")
         # 선수 성적 관련 질문인지 확인
         is_player_stats_question = any(keyword in question for keyword in [
             "성적", "어때", "어떻게", "요즘", "최근", "지금", "현재",
-            "투수", "타자", "선수", "선발", "구원", "마무리", "순위", "최고", "가장"
+            "투수", "타자", "선수", "선발", "구원", "마무리", "최고", "가장"
+        ])
+        
+        # 팀 순위 및 통계 관련 질문인지 확인
+        is_team_rank_question = any(keyword in question for keyword in [
+            "순위", "랭킹", "몇 위", "등수", "승률", "승수", "패수", "몇승", "몇패",
+            "팀 타율", "팀 홈런", "팀 ERA", "전적", "상위권", "하위권", "1위", "2위", "3위"
         ])
         
         if is_schedule_question:
