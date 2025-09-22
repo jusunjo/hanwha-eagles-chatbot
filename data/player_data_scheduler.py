@@ -38,35 +38,35 @@ class PlayerDataScheduler:
             print(f"❌ Supabase 연결 실패: {e}")
             raise e
     
-    def get_all_players_from_season_stats(self) -> List[Dict[str, Any]]:
-        """player_season_stats 테이블에서 고유한 선수들 조회"""
+    def get_all_players_from_players_table(self) -> List[Dict[str, Any]]:
+        """players 테이블에서 모든 선수들 조회"""
         try:
-            print("🔍 player_season_stats 테이블에서 고유한 선수들 조회 중...")
-            result = self.supabase.supabase.table("player_season_stats").select("player_id, player_name").execute()
+            print("🔍 players 테이블에서 모든 선수들 조회 중...")
+            result = self.supabase.supabase.table("players").select("pcode, player_name").execute()
             
             if result.data:
-                # 중복 제거하여 고유한 선수들만 추출
-                unique_players = {}
+                player_list = []
                 for player in result.data:
-                    player_id = player['player_id']
-                    if player_id not in unique_players:
-                        unique_players[player_id] = {
-                            'player_id': player_id,
-                            'player_name': player['player_name']
-                        }
+                    pcode = player.get('pcode')
+                    player_name = player.get('player_name')
+                    
+                    if pcode and player_name:
+                        player_list.append({
+                            'player_id': pcode,  # pcode를 player_id로 사용
+                            'player_name': player_name
+                        })
                 
-                player_list = list(unique_players.values())
-                print(f"✅ {len(player_list)}명의 고유한 선수 조회 완료")
+                print(f"✅ {len(player_list)}명의 선수 조회 완료")
                 return player_list
             else:
-                print("❌ player_season_stats 테이블에 선수 데이터가 없습니다.")
+                print("❌ players 테이블에 선수 데이터가 없습니다.")
                 return []
                 
         except Exception as e:
-            print(f"❌ player_season_stats 테이블 조회 오류: {e}")
+            print(f"❌ players 테이블 조회 오류: {e}")
             return []
     
-    def fetch_player_data_from_api(self, player_name: str, player_id: int) -> Dict[str, Any]:
+    def fetch_player_data_from_api(self, player_name: str, player_id: str) -> Dict[str, Any]:
         """네이버 API에서 선수 데이터 수집"""
         try:
             print(f"🏃 {player_name} 선수 데이터 API 요청 중...")
@@ -82,7 +82,7 @@ class PlayerDataScheduler:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
             
-            response = requests.get(self.player_record_base_url, params=params, headers=headers, timeout=30)
+            response = requests.get(self.player_record_base_url, params=params, headers=headers, timeout=10)
             print(f"📊 {player_name} API 응답 코드: {response.status_code}")
             
             if response.status_code == 200:
@@ -156,7 +156,7 @@ class PlayerDataScheduler:
             print(f"❌ {player_name} HTML 파싱 오류: {e}")
             return None
     
-    def save_player_season_stats(self, player_id: int, player_name: str, season_stats: List[Dict[str, Any]]) -> bool:
+    def save_player_season_stats(self, player_id: str, player_name: str, season_stats: List[Dict[str, Any]]) -> bool:
         """선수 시즌별 통계를 player_season_stats 테이블에 저장"""
         try:
             if not season_stats:
@@ -251,7 +251,7 @@ class PlayerDataScheduler:
             print(f"❌ {player_name} 시즌별 통계 저장 오류: {e}")
             return False
     
-    def save_player_game_stats(self, player_id: int, player_name: str, game_stats: List[Dict[str, Any]]) -> bool:
+    def save_player_game_stats(self, player_id: str, player_name: str, game_stats: List[Dict[str, Any]]) -> bool:
         """선수 경기별 통계를 player_game_stats 테이블에 저장"""
         try:
             if not game_stats:
@@ -346,8 +346,8 @@ class PlayerDataScheduler:
         print(f"⏰ 시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
-            # 1. player_season_stats 테이블에서 고유한 선수들 조회
-            players = self.get_all_players_from_season_stats()
+            # 1. players 테이블에서 모든 선수들 조회
+            players = self.get_all_players_from_players_table()
             
             if not players:
                 print("❌ 수집할 선수가 없습니다.")
@@ -358,43 +358,50 @@ class PlayerDataScheduler:
             fail_count = 0
             
             for i, player in enumerate(players, 1):
-                player_name = player.get("player_name")
-                player_id = player.get("player_id")
-                
-                if not player_name or not player_id:
-                    print(f"❌ {i}/{len(players)}: 선수 정보가 불완전합니다. 건너뜁니다.")
-                    fail_count += 1
-                    continue
-                
-                print(f"\n📊 {i}/{len(players)}: {player_name} 처리 중...")
-                
-                # API에서 데이터 수집
-                player_data = self.fetch_player_data_from_api(player_name, player_id)
-                
-                if player_data:
-                    # 시즌별 통계 저장
-                    season_success = self.save_player_season_stats(
-                        player_id, player_name, player_data.get('season_stats', [])
-                    )
+                try:
+                    player_name = player.get("player_name")
+                    player_id = player.get("player_id")
                     
-                    # 경기별 통계 저장
-                    game_success = self.save_player_game_stats(
-                        player_id, player_name, player_data.get('game_stats', [])
-                    )
+                    if not player_name or not player_id:
+                        print(f"❌ {i}/{len(players)}: 선수 정보가 불완전합니다. 건너뜁니다.")
+                        fail_count += 1
+                        continue
                     
-                    if season_success and game_success:
-                        success_count += 1
-                        print(f"✅ {player_name} 완료")
+                    print(f"\n📊 {i}/{len(players)}: {player_name} 처리 중...")
+                    
+                    # API에서 데이터 수집
+                    player_data = self.fetch_player_data_from_api(player_name, player_id)
+                    
+                    if player_data:
+                        # 시즌별 통계 저장
+                        season_success = self.save_player_season_stats(
+                            player_id, player_name, player_data.get('season_stats', [])
+                        )
+                        
+                        # 경기별 통계 저장
+                        game_success = self.save_player_game_stats(
+                            player_id, player_name, player_data.get('game_stats', [])
+                        )
+                        
+                        if season_success and game_success:
+                            success_count += 1
+                            print(f"✅ {player_name} 완료")
+                        else:
+                            fail_count += 1
+                            print(f"❌ {player_name} 저장 실패")
                     else:
                         fail_count += 1
-                        print(f"❌ {player_name} 저장 실패")
-                else:
+                        print(f"❌ {player_name} 데이터 수집 실패")
+                    
+                    # API 호출 간격 조절 (서버 부하 방지)
+                    import time
+                    time.sleep(0.3)
+                    
+                except Exception as e:
                     fail_count += 1
-                    print(f"❌ {player_name} 데이터 수집 실패")
-                
-                # API 호출 간격 조절 (서버 부하 방지)
-                import time
-                time.sleep(1)
+                    print(f"❌ {player_name} 처리 중 오류 발생: {e}")
+                    # 개별 선수 오류는 무시하고 계속 진행
+                    continue
             
             print("\n" + "=" * 60)
             print(f"🎉 선수 데이터 수집 작업 완료!")

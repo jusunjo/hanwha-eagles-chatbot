@@ -27,40 +27,15 @@ async def health_check():
 @app.post("/kakao")
 async def kakao_webhook(request: Request):
     """
-    Kakao chatbot webhook endpoint with RAG system
+    Kakao chatbot webhook endpoint
     """
     try:
         # 요청 데이터 파싱
         request_data = await request.json()
         logger.info(f"Received Kakao request: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
         
-        # 질문 추출
-        question = ""
-        if 'userRequest' in request_data:
-            question = request_data['userRequest']['utterance']
-        elif 'message' in request_data:
-            question = request_data['message']
-        else:
-            return JSONResponse(content={"error": "Invalid request format"}, status_code=400)
-        
-        # RAG 시스템으로 답변 생성
-        from rag.rag_text_to_sql import RAGTextToSQL
-        rag_text_to_sql = RAGTextToSQL()
-        answer = rag_text_to_sql.process_question(question)
-        
-        # 카카오 응답 형식으로 변환
-        response = {
-            "version": "2.0",
-            "template": {
-                "outputs": [
-                    {
-                        "simpleText": {
-                            "text": answer
-                        }
-                    }
-                ]
-            }
-        }
+        # 카카오 서비스를 통한 처리
+        response = await kakao_service.process_kakao_request(request_data)
         
         logger.info(f"Kakao response: {json.dumps(response, ensure_ascii=False, indent=2)}")
         return JSONResponse(content=response)
