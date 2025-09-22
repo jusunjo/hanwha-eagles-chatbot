@@ -121,10 +121,95 @@ class RAGTextToSQL:
     def _execute_direct_sql(self, sql: str, question: str = "") -> list:
         """SQL을 직접 실행하여 데이터 조회"""
         try:
+            # SQL에서 테이블명 추출
+            table_name = self._extract_table_name(sql)
+            print(f"🔍 추출된 테이블명: {table_name}")
+            
             # SQL 파싱하여 WHERE 조건 추출
             where_conditions = self._extract_where_conditions(sql)
             print(f"🔍 추출된 WHERE 조건: {where_conditions}")
             
+            # 테이블별 처리
+            if table_name == "game_schedule":
+                return self._query_game_schedule(sql, where_conditions)
+            elif table_name == "game_result":
+                return self._query_game_result(sql, where_conditions)
+            elif table_name in ["player_season_stats", "player_game_stats"]:
+                return self._query_player_stats(sql, where_conditions, question)
+            else:
+                print(f"❌ 지원하지 않는 테이블: {table_name}")
+                return []
+            
+        except Exception as e:
+            print(f"❌ 직접 SQL 실행 오류: {e}")
+            return [f"DB_ERROR: SQL 실행 중 오류가 발생했습니다: {str(e)}"]
+    
+    def _extract_table_name(self, sql: str) -> str:
+        """SQL에서 테이블명 추출"""
+        import re
+        # FROM 절에서 테이블명 추출
+        from_match = re.search(r'FROM\s+(\w+)', sql, re.IGNORECASE)
+        if from_match:
+            return from_match.group(1).lower()
+        return ""
+    
+    def _query_game_schedule(self, sql: str, where_conditions: dict) -> list:
+        """game_schedule 테이블 조회"""
+        try:
+            query = self.supabase.supabase.table("game_schedule").select("*")
+            
+            # WHERE 조건 적용
+            for col, val in where_conditions.items():
+                if col == "game_date" and val == "CURRENT_DATE":
+                    # CURRENT_DATE 처리
+                    from datetime import datetime
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    query = query.eq("game_date", today)
+                else:
+                    query = query.eq(col, val)
+            
+            # ORDER BY와 LIMIT 처리
+            result = self._apply_order_and_limit(query, sql)
+            if result is not None:
+                data = result
+            else:
+                result = query.execute()
+                data = result.data or []
+            
+            print(f"✅ game_schedule 조회 결과: {len(data)}개")
+            return data
+            
+        except Exception as e:
+            print(f"❌ game_schedule 조회 오류: {e}")
+            return []
+    
+    def _query_game_result(self, sql: str, where_conditions: dict) -> list:
+        """game_result 테이블 조회"""
+        try:
+            query = self.supabase.supabase.table("game_result").select("*")
+            
+            # WHERE 조건 적용
+            for col, val in where_conditions.items():
+                query = query.eq(col, val)
+            
+            # ORDER BY와 LIMIT 처리
+            result = self._apply_order_and_limit(query, sql)
+            if result is not None:
+                data = result
+            else:
+                result = query.execute()
+                data = result.data or []
+            
+            print(f"✅ game_result 조회 결과: {len(data)}개")
+            return data
+            
+        except Exception as e:
+            print(f"❌ game_result 조회 오류: {e}")
+            return []
+    
+    def _query_player_stats(self, sql: str, where_conditions: dict, question: str = "") -> list:
+        """선수 통계 테이블 조회"""
+        try:
             # 투수/타자 구분을 위한 필터링
             player_type = self._determine_player_type(sql)
             print(f"🔍 선수 유형: {player_type}")
@@ -176,49 +261,55 @@ class RAGTextToSQL:
                     print(f"🔍 전체 팀 평균 규정타석 필터링 적용: {required_pa}타석 이상")
                     query = query.gte("ab", required_pa)
             
-            # ORDER BY와 LIMIT 처리 - 일반적인 방식으로 처리
-            order_by_match = re.search(r'ORDER BY\s+(\w+)\s+(DESC|ASC)', sql, re.IGNORECASE)
-            limit_match = re.search(r'LIMIT\s+(\d+)', sql, re.IGNORECASE)
-            
-            if order_by_match and limit_match:
-                # ORDER BY + LIMIT 조합인 경우: 모든 데이터를 가져와서 정렬 후 제한
-                column = order_by_match.group(1).lower()
-                direction = order_by_match.group(2).upper()
-                limit_count = int(limit_match.group(1))
-                
-                result = query.execute()
-                data = result.data or []
-                
-                # Python에서 정렬 (NULL 값은 0으로 처리)
-                reverse = (direction == 'DESC')
-                data = sorted(data, key=lambda x: x.get(column, 0) or 0, reverse=reverse)
-                data = data[:limit_count]
-            elif order_by_match:
-                # ORDER BY만 있는 경우: Supabase ORDER BY 사용
-                column = order_by_match.group(1).lower()
-                direction = order_by_match.group(2).upper()
-                query = query.order(column, desc=(direction == 'DESC'))
-                result = query.execute()
-                data = result.data or []
-            elif limit_match:
-                # LIMIT만 있는 경우
-                limit_count = int(limit_match.group(1))
-                query = query.limit(limit_count)
-                result = query.execute()
-                data = result.data or []
+            # ORDER BY와 LIMIT 처리
+            result = self._apply_order_and_limit(query, sql)
+            if result is not None:
+                data = result
             else:
-                # ORDER BY와 LIMIT이 없는 경우
                 result = query.execute()
                 data = result.data or []
             
-            print(f"✅ 직접 SQL 실행 결과: {len(data)}개")
+            print(f"✅ 선수 통계 조회 결과: {len(data)}개")
             if data:
                 print(f"🔍 첫 번째 결과: {data[0].get('player_name', 'Unknown')} - 홈런: {data[0].get('hr', 0)}")
             return data
             
         except Exception as e:
-            print(f"❌ 직접 SQL 실행 오류: {e}")
-            return [f"DB_ERROR: SQL 실행 중 오류가 발생했습니다: {str(e)}"]
+            print(f"❌ 선수 통계 조회 오류: {e}")
+            return [f"DB_ERROR: 선수 통계 조회 중 오류가 발생했습니다: {str(e)}"]
+    
+    def _apply_order_and_limit(self, query, sql: str):
+        """ORDER BY와 LIMIT 처리"""
+        import re
+        
+        order_by_match = re.search(r'ORDER BY\s+(\w+)\s+(DESC|ASC)', sql, re.IGNORECASE)
+        limit_match = re.search(r'LIMIT\s+(\d+)', sql, re.IGNORECASE)
+        
+        if order_by_match and limit_match:
+            # ORDER BY + LIMIT 조합인 경우: 모든 데이터를 가져와서 정렬 후 제한
+            column = order_by_match.group(1).lower()
+            direction = order_by_match.group(2).upper()
+            limit_count = int(limit_match.group(1))
+            
+            result = query.execute()
+            data = result.data or []
+            
+            # Python에서 정렬 (NULL 값은 0으로 처리)
+            reverse = (direction == 'DESC')
+            data = sorted(data, key=lambda x: x.get(column, 0) or 0, reverse=reverse)
+            data = data[:limit_count]
+            return data
+        elif order_by_match:
+            # ORDER BY만 있는 경우: Supabase ORDER BY 사용
+            column = order_by_match.group(1).lower()
+            direction = order_by_match.group(2).upper()
+            query = query.order(column, desc=(direction == 'DESC'))
+        elif limit_match:
+            # LIMIT만 있는 경우
+            limit_count = int(limit_match.group(1))
+            query = query.limit(limit_count)
+        
+        return query
     
     def _extract_where_conditions(self, sql: str) -> dict:
         """SQL에서 WHERE 조건 추출"""
@@ -357,61 +448,8 @@ class RAGTextToSQL:
     def _get_game_schedule_data(self, sql: str, question: str = "") -> list:
         """경기 일정 데이터 조회"""
         try:
-            from datetime import datetime, timedelta
-            
-            # game_schedule 테이블에서 데이터 조회
-            result = self.supabase.supabase.table("game_schedule").select("*").execute()
-            
-            if not result.data:
-                return []
-            
-            # 날짜 필터링
-            today = datetime.now()
-            today_str = today.strftime("%Y-%m-%d")
-            
-            # 질문에 따른 날짜 필터링
-            if "오늘" in question or "today" in question.lower():
-                filtered_games = [game for game in result.data if game.get('game_date') == today_str]
-                print(f"📅 오늘({today_str}) 경기 조회: {len(filtered_games)}개")
-            elif "내일" in question or "tomorrow" in question.lower():
-                tomorrow = today + timedelta(days=1)
-                tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-                filtered_games = [game for game in result.data if game.get('game_date') == tomorrow_str]
-                print(f"📅 내일({tomorrow_str}) 경기 조회: {len(filtered_games)}개")
-            else:
-                # 기본적으로 최근 7일간의 경기만 조회
-                week_ago = today - timedelta(days=7)
-                week_ago_str = week_ago.strftime("%Y-%m-%d")
-                filtered_games = [
-                    game for game in result.data 
-                    if game.get('game_date', '') >= week_ago_str and game.get('game_date', '') <= today_str
-                ]
-                print(f"📅 최근 7일간({week_ago_str} ~ {today_str}) 경기 조회: {len(filtered_games)}개")
-            
-            # 특정 팀 관련 질문인지 확인
-            team_mappings = {
-                '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
-                '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
-                'NC': 'NC', 'LG': 'LG'
-            }
-            
-            # 질문에서 팀명 추출
-            mentioned_team = None
-            for team_name, team_code in team_mappings.items():
-                if team_name in question or team_code.lower() in question.lower():
-                    mentioned_team = team_code
-                    break
-            
-            if mentioned_team:
-                # 해당 팀 경기만 필터링
-                team_games = [
-                    game for game in filtered_games 
-                    if game.get('home_team_code') == mentioned_team or game.get('away_team_code') == mentioned_team
-                ]
-                print(f"📅 {mentioned_team} 팀 경기 조회: {len(team_games)}개")
-                return team_games
-            else:
-                return filtered_games
+            # SQL을 직접 실행하여 데이터 조회
+            return self._execute_direct_sql(sql, question)
             
         except Exception as e:
             print(f"❌ 경기 일정 조회 오류: {e}")
