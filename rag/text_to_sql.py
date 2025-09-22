@@ -18,7 +18,7 @@ class TextToSQL:
         """Text-to-SQL 초기화"""
         try:
             self.llm = ChatOpenAI(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 temperature=0.1,
                 api_key=os.getenv("OPENAI_API_KEY")
             )
@@ -121,6 +121,11 @@ class TextToSQL:
    - "롯데" → "LT", "삼성" → "SS", "SSG" → "SK"
    - "KT" → "KT", "NC" → "NC", "LG" → "LG"
 
+2. 질문에 언급된 팀에 맞는 팀 코드를 사용하세요:
+   - "키움 원정 경기" → away_team_code = 'WO'
+   - "두산 홈 경기" → home_team_code = 'OB'
+   - "KIA vs 롯데" → home_team_code = 'HT' AND away_team_code = 'LT' (또는 반대)
+
 2. 선수명은 그대로 사용하세요:
    - "문동주", "이정후", "김하성" 등 선수명은 팀 코드로 변환하지 마세요
    - 선수명은 players.player_name에서 직접 검색
@@ -128,12 +133,19 @@ class TextToSQL:
 3. 타율 필드명:
    - 타율은 "hra" 필드만 사용 (절대 "avg", "battingAverage" 사용 금지)
 
-4. 선수 비교 질문 처리:
+4. 팀별 질문 처리:
+   - 질문에 언급된 팀에 맞는 팀 코드를 사용하세요
+   - "키움 원정 경기" → away_team_code = 'WO'
+   - "두산 홈 경기" → home_team_code = 'OB'
+   - "KIA vs 롯데" → home_team_code = 'HT' AND away_team_code = 'LT' (또는 반대)
+   - 예시는 참고용이므로 질문에 맞는 팀 코드로 변경하세요
+
+5. 선수 비교 질문 처리:
    - "폰세 vs 원태인", "문동주와 이정후" 같은 질문은 선수 성적 비교
    - 경기 일정이 아닌 선수 시즌 통계를 조회해야 함
    - player_season_stats 테이블에서 해당 선수들의 2025년 성적 조회
 
-5. game_schedule 테이블 구조 (실제 컬럼들):
+6. game_schedule 테이블 구조 (실제 컬럼들):
    - game_id, super_category_id, category_id, category_name
    - game_date, game_date_time, time_tbd, stadium, title
    - home_team_code, home_team_name, home_team_score
@@ -146,7 +158,7 @@ class TextToSQL:
    - home_current_pitcher_name, away_current_pitcher_name, series_game_no
    - broad_channel, round_name, round_game_no, created_at, updated_at
 
-5. game_result 테이블 구조 (팀 순위 및 통계):
+7. game_result 테이블 구조 (팀 순위 및 통계):
    - team_id, team_name, season_id, year, ranking, order_no, wra (승률)
    - game_count, win_game_count, drawn_game_count, lose_game_count, game_behind
    - continuous_game_result, last_five_games
@@ -154,28 +166,40 @@ class TextToSQL:
    - 수비 통계: defense_era, defense_r, defense_er, defense_inning, defense_hit, defense_hr, defense_kk, defense_bbhp, defense_err, defense_whip, defense_qs, defense_save, defense_hold, defense_wp
    - has_my_team, my_team_category_id, next_schedule_game_id, opposing_team_name, created_at, updated_at
 
-6. players 테이블 구조:
+8. players 테이블 구조:
    - id, player_name, pcode, team, position
 
-7. player_season_stats 테이블 구조 (시즌 통계):
+9. player_season_stats 테이블 구조 (시즌 통계):
    - player_id, player_name, gyear, team, position
    - 타격 통계: hra (타율), hr (홈런), rbi (타점), ab (타석), hit (안타), h2 (2루타), h3 (3루타), sb (도루), bbhp (볼넷+사구), kk (삼진), gd (병살타), obp (출루율), slg (장타율), ops (OPS)
    - 투수 통계: era (평균자책점), w (승수), l (패수), sv (세이브), hold (홀드), wp (완투), qs (퀄리티스타트), whip (WHIP), kk (삼진), bbhp (볼넷+사구), er (자책점), r (실점), inning (이닝), hit (피안타), hr (피홈런), err (실책)
 
-8. player_game_stats 테이블 구조 (경기별 통계):
+10. player_game_stats 테이블 구조 (경기별 통계):
    - player_id, player_name, gameId, gday, opponent, team, position
    - 타격 통계: hra (타율), hr (홈런), rbi (타점), ab (타석), hit (안타), h2 (2루타), h3 (3루타), sb (도루), bbhp (볼넷+사구), kk (삼진), gd (병살타), obp (출루율), slg (장타율), ops (OPS)
    - 투수 통계: era (평균자책점), w (승수), l (패수), sv (세이브), hold (홀드), wp (완투), qs (퀄리티스타트), whip (WHIP), kk (삼진), bbhp (볼넷+사구), er (자책점), r (실점), inning (이닝), hit (피안타), hr (피홈런), err (실책)
 
-9. 포괄적 질문 처리 규칙 (모든 질문 유형 대응):
+11. ⚠️ 중요: 질문 유형 분류 규칙 (기록 vs 일정):
 
-📅 경기 일정 관련:
+📊 **기록/과거 데이터 질문** (현재 DB에 없음 - DB_ERROR 반환):
+   - "우승년도", "마지막 우승", "과거 성적", "역사", "최근 경기 결과"
+   - "몇년도에 우승", "언제 마지막으로 이겼어", "과거 전적"
+   - "한화 마지막 우승년도", "두산 우승 기록", "KIA 과거 성적"
+   - 이런 질문들은 현재 DB에 데이터가 없으므로 DB_ERROR를 반환해야 함
+
+📅 **일정/미래 데이터 질문** (현재 DB에 있음):
    - 시간: "오늘", "내일", "어제", "이번 주", "다음 주", "이번 달", "9월", "10월" → 날짜 필터링
    - 팀: "한화", "두산", "KIA" 등 → home_team_code/away_team_code 필터링
    - 장소: "홈", "원정", "잠실", "고척" → home_team_code/away_team_code/stadium 필터링
-   - 기간: "앞으로", "남은", "다음", "최근", "마지막" → 날짜 범위 필터링
+   - 기간: "앞으로", "남은", "다음" → 날짜 범위 필터링
    - 요일: "주말", "주중", "토요일", "일요일" → 요일 필터링
    - 대결: "한화 vs 두산" → 양팀 코드 필터링
+
+📊 **현재 시즌 순위/통계 질문** (현재 DB에 있음):
+   - "올해 몇등이야", "이번 시즌 순위", "2025년 순위"
+   - "한화 올해 순위", "두산 이번 시즌 몇등", "KIA 2025년 순위"
+   - "현재 순위", "지금 몇등", "이번 시즌 전적"
+   - 이런 질문들은 game_result 테이블에서 year = '2025'로 조회
 
 🏆 경기 결과 관련:
    - 결과: "결과", "전적", "승부" → status_code = 'RESULT' 필터링
@@ -201,25 +225,56 @@ class TextToSQL:
    - 개인 통계: "홈런 개수", "타점", "도루", "완봉", "세이브" → 해당 컬럼 사용
    - 시즌 통계: "이번 시즌" → gyear = '2025' 필터링
 
-10. 테이블 선택 가이드:
+12. 테이블 선택 가이드:
    - 경기 일정/결과 → game_schedule
    - 팀 순위/통계 → game_result  
    - 선수 시즌 성적 → player_season_stats
    - 선수 경기별 성적 → player_game_stats
    - 선수 기본 정보 → players
 
-11. 공통 필터링 규칙:
+13. 공통 필터링 규칙:
    - 팀명 → 팀 코드 변환 필수
    - 날짜 → YYYY-MM-DD 형식 사용
    - 순위 → ORDER BY + LIMIT 조합
    - 통계 → NULL 값 제외 (WHERE 컬럼 IS NOT NULL)
 
+14. ⚠️ 질문 처리 우선순위:
+   1. 먼저 질문이 "기록/과거 데이터" 질문인지 확인
+   2. 기록 질문이면: "SELECT 'DB_ERROR: 해당 질문에 대한 과거 데이터가 없습니다.' as error;"
+   3. 일정 질문이면: 정상적인 SQL 생성
+
 질문: {question}
 
 올바른 SQL 예시:
 
+=== 기록/과거 데이터 질문 (DB_ERROR 반환) ===
+한화 마지막 우승년도:
+SELECT 'DB_ERROR: 해당 질문에 대한 과거 데이터가 없습니다.' as error;
+
+두산 우승 기록:
+SELECT 'DB_ERROR: 해당 질문에 대한 과거 데이터가 없습니다.' as error;
+
+KIA 과거 성적:
+SELECT 'DB_ERROR: 해당 질문에 대한 과거 데이터가 없습니다.' as error;
+
+=== 현재 시즌 순위/통계 질문 (정상 조회) ===
+한화 올해 순위:
+SELECT team_name, ranking, wra, win_game_count, lose_game_count
+FROM game_result 
+WHERE team_id = 'HH' AND year = '2025';
+
+두산 이번 시즌 몇등:
+SELECT team_name, ranking, wra, win_game_count, lose_game_count
+FROM game_result 
+WHERE team_id = 'OB' AND year = '2025';
+
+KIA 2025년 순위:
+SELECT team_name, ranking, wra, win_game_count, lose_game_count
+FROM game_result 
+WHERE team_id = 'HT' AND year = '2025';
+
 === 선수 성적 관련 ===
-한화 타자 순위 조회:
+특정 팀 타자 순위 조회 (예: 한화):
 SELECT p.player_name, p.team, s.hra, s.hr, s.rbi 
 FROM players p
 JOIN player_season_stats s ON p.id = s.player_id
@@ -239,7 +294,7 @@ FROM players p
 JOIN player_season_stats s ON p.id = s.player_id
 WHERE p.player_name IN ('폰세', '원태인') AND s.gyear = '2025';
 
-팀 비교 질문 (한화 vs 두산):
+팀 비교 질문 (예: 한화 vs 두산):
 SELECT team_name, ranking, wra, win_game_count, lose_game_count, offense_hra, defense_era
 FROM game_result 
 WHERE team_id IN ('HH', 'OB') AND year = '2025';
@@ -265,14 +320,14 @@ FROM game_schedule
 WHERE game_date = '2025-09-19'
 ORDER BY game_date_time;
 
-한화 내일 경기 상대 조회:
+특정 팀 내일 경기 상대 조회 (예: 한화):
 SELECT home_team_name, away_team_name, stadium, game_date_time, home_team_score, away_team_score
 FROM game_schedule 
 WHERE game_date = '2025-09-19' 
 AND (home_team_code = 'HH' OR away_team_code = 'HH');
 
 === 앞으로 남은 경기 일정 ===
-한화 앞으로 남은 경기 일정:
+특정 팀 앞으로 남은 경기 일정 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
 FROM game_schedule 
 WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
@@ -292,7 +347,7 @@ FROM game_schedule
 WHERE game_date >= '2025-09-01' AND game_date < '2025-10-01'
 ORDER BY game_date, game_date_time;
 
-한화 9월 경기 일정:
+특정 팀 9월 경기 일정 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
 FROM game_schedule 
 WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
@@ -307,7 +362,7 @@ WHERE game_date >= '2025-01-01' AND game_date < '2026-01-01'
 ORDER BY game_date, game_date_time;
 
 === 다음/최근 경기 ===
-한화 다음 경기:
+특정 팀 다음 경기 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
 FROM game_schedule 
 WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
@@ -315,7 +370,7 @@ AND game_date >= '2025-09-18'
 ORDER BY game_date, game_date_time
 LIMIT 1;
 
-한화 최근 경기:
+특정 팀 최근 경기 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, home_team_score, away_team_score, winner, status_info
 FROM game_schedule 
 WHERE (home_team_code = 'HH' OR away_team_code = 'HH')
@@ -324,14 +379,14 @@ ORDER BY game_date DESC, game_date_time DESC
 LIMIT 1;
 
 === 홈/원정 경기 ===
-한화 홈 경기:
+특정 팀 홈 경기 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
 FROM game_schedule 
 WHERE home_team_code = 'HH'
 AND game_date >= '2025-09-18'
 ORDER BY game_date, game_date_time;
 
-한화 원정 경기:
+특정 팀 원정 경기 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
 FROM game_schedule 
 WHERE away_team_code = 'HH'
@@ -361,13 +416,15 @@ FROM game_schedule
 WHERE status_code = 'RESULT' AND game_date = '2025-09-17'
 ORDER BY game_date_time;
 
-한화 vs 두산 경기 결과:
+특정 팀 vs 특정 팀 경기 결과 (예: 한화 vs 두산):
 SELECT game_date, home_team_name, away_team_name, home_team_score, away_team_score, winner, status_info
 FROM game_schedule 
 WHERE ((home_team_code = 'HH' AND away_team_code = 'OB') OR (home_team_code = 'OB' AND away_team_code = 'HH'))
 AND status_code = 'RESULT'
 ORDER BY game_date DESC
 LIMIT 5;
+
+※ 참고: 다른 팀의 경우 팀 코드만 변경하면 됩니다
 
 === 팀 순위 및 통계 관련 ===
 전체 팀 순위:
@@ -495,11 +552,16 @@ AND game_date >= '2025-09-18'
 ORDER BY game_date, game_date_time
 LIMIT 1;
 
-한화 원정 경기 일정:
+특정 팀 원정 경기 일정 (예: 한화):
 SELECT game_date, home_team_name, away_team_name, stadium, game_date_time
 FROM game_schedule 
 WHERE away_team_code = 'HH' AND game_date >= '2025-09-18'
 ORDER BY game_date, game_date_time;
+
+※ 참고: 다른 팀의 경우 팀 코드만 변경하면 됩니다
+   - 키움: away_team_code = 'WO'
+   - 두산: away_team_code = 'OB'
+   - KIA: away_team_code = 'HT'
 
 이번 달 한화 경기 개수:
 SELECT COUNT(*) as game_count
@@ -667,7 +729,7 @@ SQL:""")
                 
         except Exception as e:
             print(f"❌ 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 데이터베이스 조회 중 오류가 발생했습니다."]
     
     def _query_normalized_tables(self, sql: str) -> list:
         """정규화된 테이블에서 데이터 조회"""
@@ -687,7 +749,7 @@ SQL:""")
             
         except Exception as e:
             print(f"❌ 정규화된 테이블 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 정규화된 테이블 조회 중 오류가 발생했습니다."]
     
     def _query_player_data(self, sql: str) -> list:
         """선수 데이터 조회"""
@@ -729,7 +791,7 @@ SQL:""")
             
         except Exception as e:
             print(f"❌ 선수 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 선수 데이터 조회 중 오류가 발생했습니다."]
     
     def _extract_player_names_from_sql(self, sql: str) -> list:
         """SQL에서 선수명 추출 (팀 코드 제외)"""
@@ -834,7 +896,7 @@ SQL:""")
             return all_data
         except Exception as e:
             print(f"❌ 특정 선수 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 특정 선수 데이터 조회 중 오류가 발생했습니다."]
     
     def _get_team_players_data(self, team_code: str) -> list:
         """팀별 선수 데이터 조회"""
@@ -848,7 +910,7 @@ SQL:""")
             return all_data
         except Exception as e:
             print(f"❌ 팀별 선수 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 팀별 선수 데이터 조회 중 오류가 발생했습니다."]
     
     def _get_position_players_data(self, position: str) -> list:
         """포지션별 선수 데이터 조회"""
@@ -862,7 +924,7 @@ SQL:""")
             return all_data
         except Exception as e:
             print(f"❌ 포지션별 선수 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 포지션별 선수 데이터 조회 중 오류가 발생했습니다."]
     
     def _get_top_players_by_stat(self, stat_field: str, sql: str) -> list:
         """통계 기준 상위 선수 조회"""
@@ -891,7 +953,7 @@ SQL:""")
             return all_data
         except Exception as e:
             print(f"❌ 상위 선수 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 상위 선수 조회 중 오류가 발생했습니다."]
     
     def _get_all_players_data(self) -> list:
         """모든 선수 데이터 조회"""
@@ -905,7 +967,7 @@ SQL:""")
             return all_data
         except Exception as e:
             print(f"❌ 모든 선수 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 모든 선수 데이터 조회 중 오류가 발생했습니다."]
     
     def _get_all_players_data_unlimited(self) -> list:
         """모든 선수 데이터 조회 (제한 없음)"""
@@ -919,7 +981,7 @@ SQL:""")
             return all_data
         except Exception as e:
             print(f"❌ 모든 선수 데이터 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 모든 선수 데이터 조회 중 오류가 발생했습니다."]
     
     def _get_game_schedule_data(self, sql: str, question: str = "") -> list:
         """경기 일정 데이터 조회"""
@@ -955,23 +1017,34 @@ SQL:""")
                 ]
                 print(f"📅 한 달간 경기 조회 ({today_str} ~ {one_month_later_str}): {len(filtered_games)}개")
             
-            # 한화 관련 질문인지 확인
-            is_hanwha_question = any(keyword in question.lower() for keyword in ['한화', 'hh', '누구랑', '누구와', '상대'])
+            # 특정 팀 관련 질문인지 확인
+            team_mappings = {
+                '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
+                '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
+                'NC': 'NC', 'LG': 'LG'
+            }
             
-            if is_hanwha_question:
-                # 한화 경기만 필터링
-                hanwha_games = [
+            # 질문에서 팀명 추출
+            mentioned_team = None
+            for team_name, team_code in team_mappings.items():
+                if team_name in question or team_code.lower() in question.lower():
+                    mentioned_team = team_code
+                    break
+            
+            if mentioned_team:
+                # 해당 팀 경기만 필터링
+                team_games = [
                     game for game in filtered_games 
-                    if game.get('home_team_code') == 'HH' or game.get('away_team_code') == 'HH'
+                    if game.get('home_team_code') == mentioned_team or game.get('away_team_code') == mentioned_team
                 ]
-                print(f"📅 한화 경기 조회: {len(hanwha_games)}개")
-                return hanwha_games
+                print(f"📅 {mentioned_team} 팀 경기 조회: {len(team_games)}개")
+                return team_games
             else:
                 return filtered_games
             
         except Exception as e:
             print(f"❌ 경기 일정 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 경기 일정 조회 중 오류가 발생했습니다."]
     
     def _extract_date_from_question(self, question: str) -> str:
         """원본 질문에서 날짜 추출 - 다양한 날짜 표현 지원"""
@@ -1154,16 +1227,30 @@ SQL:""")
             
         except Exception as e:
             print(f"❌ 팀 순위 및 통계 조회 오류: {e}")
-            return []
+            return ["DB_ERROR: 팀 순위 및 통계 조회 중 오류가 발생했습니다."]
     
     def analyze_results(self, question: str, data: list) -> str:
         """조회 결과를 분석해서 답변 생성"""
         try:
             print(f"🔍 analyze_results 호출 - 데이터 개수: {len(data) if data else 0}개")
             
+            # 실제 데이터 값 로그 출력
+            if data:
+                print(f"📊 조회된 데이터 내용:")
+                for i, item in enumerate(data[:3]):  # 최대 3개만 출력
+                    print(f"  [{i+1}] {item}")
+                if len(data) > 3:
+                    print(f"  ... 외 {len(data)-3}개 더")
+            
             if not data:
                 print("❌ 데이터가 없어서 적절한 응답 반환")
                 return self._get_no_data_response(question)
+            
+            # DB 에러 메시지가 포함된 데이터인지 확인
+            if isinstance(data, list) and len(data) > 0:
+                if isinstance(data[0], str) and data[0].startswith("DB_ERROR:"):
+                    print("❌ DB 에러 감지 - 에러 메시지 반환")
+                    return data[0]
             
             # 데이터를 컨텍스트로 변환
             context = json.dumps(data, ensure_ascii=False, indent=2)
@@ -1176,19 +1263,12 @@ SQL:""")
             
         except Exception as e:
             print(f"❌ 결과 분석 오류: {e}")
-            return f"데이터 분석 중 오류가 발생했습니다: {str(e)}"
+            return "DB_ERROR: 데이터 분석 중 오류가 발생했습니다."
     
     def _get_no_data_response(self, question: str) -> str:
-        """데이터를 찾을 수 없을 때의 응답 생성"""
-        if "vs" in question.lower() or "대" in question or "비교" in question:
-            return """죄송합니다. 해당 질문에 대한 정확한 데이터를 데이터베이스에서 찾을 수 없습니다.
-
-더 나은 서비스를 제공할 수 있도록 노력하겠습니다. 
-- 선수명이 정확한지 확인해주세요
-- 다른 질문으로 다시 시도해주세요
-- 문의사항이 있으시면 언제든 말씀해주세요"""
-        else:
-            return "해당 질문에 대한 데이터를 찾을 수 없습니다."
+        """데이터베이스에서 데이터를 찾을 수 없을 때의 응답 생성"""
+        # 명확한 DB 에러 텍스트 반환 (다른 처리 로직에서 활용)
+        return "DB_ERROR: 데이터베이스에서 해당 질문에 대한 데이터를 찾을 수 없습니다."
     
     def _create_analysis_prompt(self, question: str, context: str) -> str:
         """질문 유형에 따른 분석 프롬프트 생성"""
@@ -1303,47 +1383,69 @@ def main():
         test_questions = [
             # 기본 질문들
             "한화 투수 중에 가장 잘하는 투수가 누구야?",
+            "두산 타자 중에 가장 잘하는 선수가 누구야?",
             "KBO 타자 중 타율이 가장 높은 선수는?",
             "문동주 선수 성적이 어때?",
             "오늘 경기 일정",
             
-            # 경기 일정 관련 (10개)
+            # 경기 일정 관련 (다양한 팀)
             "내일 한화 경기 일정 알려줘",
+            "내일 두산 경기 일정 알려줘",
+            "내일 KIA 경기 일정 알려줘",
             "한화 앞으로 남은 경기 일정",
+            "두산 앞으로 남은 경기 일정",
             "이번 주 경기 일정",
             "9월 경기 일정",
             "한화 홈 경기 일정",
+            "두산 홈 경기 일정",
             "주말 경기 일정",
             "다음주 토요일 경기",
             "잠실 경기 일정",
             "한화 vs 두산 경기 언제야?",
+            "두산 vs KIA 경기 언제야?",
             "한화 다음 경기 상대는 누구야?",
+            "두산 다음 경기 상대는 누구야?",
             
-            # 경기 결과 관련 (8개)
+            # 경기 결과 관련 (다양한 팀)
             "어제 경기 결과",
             "한화 vs 두산 경기 결과",
+            "두산 vs KIA 경기 결과",
             "최근 한화 경기 결과",
+            "최근 두산 경기 결과",
             "3월 8일 경기 결과",
             "한화 이번 시즌 전적",
+            "두산 이번 시즌 전적",
             "한화 승률이 어때?",
+            "두산 승률이 어때?",
             "한화 몇승 몇패야?",
+            "두산 몇승 몇패야?",
             "한화 순위가 몇 위야?",
+            "두산 순위가 몇 위야?",
             
-            # 선수 성적 관련 (7개)
+            # 선수 성적 관련 (다양한 팀)
             "문동주 선수 성적이 어때?",
             "한화 타자 중에 가장 잘하는 선수가 누구야?",
+            "두산 타자 중에 가장 잘하는 선수가 누구야?",
             "KBO 타율 1위는 누구야?",
             "한화 투수 중에 가장 잘하는 투수가 누구야?",
+            "두산 투수 중에 가장 잘하는 투수가 누구야?",
             "이정후 선수 요즘 어때?",
             "한화 홈런 1위는 누구야?",
+            "두산 홈런 1위는 누구야?",
             "한화 ERA 1위 투수는 누구야?",
+            "두산 ERA 1위 투수는 누구야?",
             
-            # 팀 통계 관련 (5개)
+            # 팀 통계 관련 (다양한 팀)
             "한화 팀 타율이 어때?",
+            "두산 팀 타율이 어때?",
             "한화 팀 홈런 개수",
+            "두산 팀 홈런 개수",
             "한화 팀 ERA",
+            "두산 팀 ERA",
             "한화 팀 순위",
+            "두산 팀 순위",
             "한화 팀 승률",
+            "두산 팀 승률",
             
             # 세부 질문들
             "한화 원정 경기 일정",

@@ -67,6 +67,47 @@ async def test_endpoint(request: Request):
         logger.error(f"Error in test endpoint: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.post("/rag-test")
+async def rag_test_endpoint(request: Request):
+    """
+    RAG 기반 Text-to-SQL 테스트 엔드포인트 (동적 스키마 제공)
+    """
+    try:
+        request_data = await request.json()
+        question = request_data.get("message", "")
+        
+        if not question:
+            return JSONResponse(content={"error": "No message provided"}, status_code=400)
+        
+        # RAG 기반 Text-to-SQL 호출
+        from rag.rag_text_to_sql import RAGTextToSQL
+        rag_text_to_sql = RAGTextToSQL()
+        answer = rag_text_to_sql.process_question(question)
+        
+        return JSONResponse(content={"answer": answer})
+        
+    except Exception as e:
+        logger.error(f"Error in rag-test endpoint: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.get("/schema")
+async def get_schema_info():
+    """
+    스키마 정보 조회 엔드포인트
+    """
+    try:
+        from rag.schema_manager import SchemaManager
+        schema_manager = SchemaManager()
+        
+        return JSONResponse(content={
+            "schema": schema_manager.schema_info,
+            "message": "스키마 정보를 성공적으로 조회했습니다."
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting schema info: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 if __name__ == "__main__":
     import uvicorn

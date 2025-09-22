@@ -73,21 +73,11 @@ class TableCreatorAndMigrator:
         
         # 테이블 생성 SQL
         create_tables_sql = """
-        -- 1. 선수 기본 정보 테이블
-        CREATE TABLE IF NOT EXISTS players (
-            id SERIAL PRIMARY KEY,
-            player_name VARCHAR(100) NOT NULL,
-            pcode VARCHAR(20) UNIQUE,
-            team VARCHAR(10),
-            position VARCHAR(20),
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        );
-
-        -- 2. 시즌별 통계 테이블
+        -- 1. 시즌별 통계 테이블 (players 테이블 없이 직접 선수명 저장)
         CREATE TABLE IF NOT EXISTS player_season_stats (
             id SERIAL PRIMARY KEY,
-            player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+            player_id INTEGER,  -- 외래키 제약 제거
+            player_name VARCHAR(100) NOT NULL,  -- 선수명 직접 저장
             gyear VARCHAR(10),
             team VARCHAR(10),
             
@@ -148,10 +138,11 @@ class TableCreatorAndMigrator:
             updated_at TIMESTAMP DEFAULT NOW()
         );
 
-        -- 3. 경기별 통계 테이블
+        -- 2. 경기별 통계 테이블 (players 테이블 없이 직접 선수명 저장)
         CREATE TABLE IF NOT EXISTS player_game_stats (
             id SERIAL PRIMARY KEY,
-            player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+            player_id INTEGER,  -- 외래키 제약 제거
+            player_name VARCHAR(100) NOT NULL,  -- 선수명 직접 저장
             gameId VARCHAR(50),
             gday VARCHAR(10),
             opponent VARCHAR(10),
@@ -274,7 +265,7 @@ class TableCreatorAndMigrator:
         except (ValueError, TypeError):
             return default
     
-    def extract_season_stats(self, record_data: Dict, player_id: int) -> List[Dict]:
+    def extract_season_stats(self, record_data: Dict, player_id: int, player_name: str) -> List[Dict]:
         """시즌별 통계 추출"""
         season_stats = []
         
@@ -288,6 +279,7 @@ class TableCreatorAndMigrator:
                 
             stat = {
                 'player_id': player_id,
+                'player_name': player_name,  # 선수명 직접 저장
                 'gyear': season.get('gyear', ''),
                 'team': season.get('team', ''),
                 'gamenum': self.safe_convert(season.get('gamenum'), int),
@@ -349,7 +341,7 @@ class TableCreatorAndMigrator:
             
         return season_stats
     
-    def extract_game_stats(self, record_data: Dict, player_id: int) -> List[Dict]:
+    def extract_game_stats(self, record_data: Dict, player_id: int, player_name: str) -> List[Dict]:
         """경기별 통계 추출"""
         game_stats = []
         
@@ -359,6 +351,7 @@ class TableCreatorAndMigrator:
         for game in record_data['game']:
             stat = {
                 'player_id': player_id,
+                'player_name': player_name,  # 선수명 직접 저장
                 'gameId': game.get('gameId'),
                 'gday': game.get('gday'),
                 'opponent': game.get('opponent'),
@@ -429,46 +422,11 @@ class TableCreatorAndMigrator:
                 print(f"\n[{i}/{len(result.data)}] {player_name} 처리 중...")
                 
                 try:
-                    # 2-1. 선수 기본 정보 확인 및 삽입/업데이트
-                    position = self.determine_position(record)
+                    # player_id는 pcode를 사용하거나 순차적으로 생성
+                    player_id = int(pcode) if pcode else i
                     
-                    # 기존 선수 확인
-                    existing_player = self.supabase.supabase.table("players").select("id, player_name, position").eq("player_name", player_name).execute()
-                    
-                    if existing_player.data:
-                        # 이미 존재하는 선수 - 업데이트
-                        player_id = existing_player.data[0]['id']
-                        old_position = existing_player.data[0].get('position', '')
-                        
-                        # 포지션이 다르면 업데이트
-                        if old_position != position:
-                            self.supabase.supabase.table("players").update({
-                                'position': position,
-                                'team': team,
-                                'pcode': pcode
-                            }).eq("id", player_id).execute()
-                            print(f"✅ {player_name} 선수 정보 업데이트 완료 (ID: {player_id}, 포지션: {old_position} → {position})")
-                        else:
-                            print(f"⏭️ {player_name} 선수 이미 존재 (ID: {player_id}, 포지션: {position})")
-                    else:
-                        # 새로운 선수 - 삽입
-                        player_result = self.supabase.supabase.table("players").insert({
-                            'id': int(pcode) if pcode else None,  # pcode를 id로 사용
-                            'player_name': player_name,
-                            'pcode': pcode,
-                            'team': team,
-                            'position': position
-                        }).execute()
-                        
-                        if not player_result.data:
-                            print(f"❌ {player_name} 선수 기본 정보 삽입 실패")
-                            continue
-                            
-                        player_id = int(pcode) if pcode else player_result.data[0]['id']
-                        print(f"✅ {player_name} 선수 기본 정보 삽입 완료 (ID: {player_id}, 포지션: {position})")
-                    
-                    # 2-2. 시즌별 통계 처리 (완전 삭제 후 삽입)
-                    season_stats = self.extract_season_stats(record, player_id)
+                    # 2-1. 시즌별 통계 처리 (완전 삭제 후 삽입)
+                    season_stats = self.extract_season_stats(record, player_id, player_name)
                     if season_stats:
                         try:
                             # 기존 시즌별 통계 강제 삭제
@@ -493,8 +451,8 @@ class TableCreatorAndMigrator:
                         except Exception as e:
                             print(f"⚠️ {player_name} 시즌별 통계 처리 중 오류 (무시하고 계속): {e}")
                     
-                    # 2-3. 경기별 통계 처리 (완전 삭제 후 삽입)
-                    game_stats = self.extract_game_stats(record, player_id)
+                    # 2-2. 경기별 통계 처리 (완전 삭제 후 삽입)
+                    game_stats = self.extract_game_stats(record, player_id, player_name)
                     if game_stats:
                         try:
                             # 기존 경기별 통계 강제 삭제
@@ -536,21 +494,24 @@ class TableCreatorAndMigrator:
         print("\n🔍 마이그레이션 결과 검증 중...")
         
         try:
-            # 선수 수 확인
-            players_count = self.supabase.supabase.table("players").select("id", count="exact").execute()
+            # 통계 수 확인
             season_count = self.supabase.supabase.table("player_season_stats").select("id", count="exact").execute()
             game_count = self.supabase.supabase.table("player_game_stats").select("id", count="exact").execute()
             
+            # 고유 선수 수 확인
+            unique_players = self.supabase.supabase.table("player_season_stats").select("player_name").execute()
+            unique_player_names = set(player['player_name'] for player in unique_players.data)
+            
             print(f"📊 마이그레이션 결과:")
-            print(f"   - 선수: {players_count.count}명")
+            print(f"   - 고유 선수: {len(unique_player_names)}명")
             print(f"   - 시즌별 통계: {season_count.count}개")
             print(f"   - 경기별 통계: {game_count.count}개")
             
             # 샘플 데이터 확인
-            sample_players = self.supabase.supabase.table("players").select("*").limit(3).execute()
+            sample_stats = self.supabase.supabase.table("player_season_stats").select("player_name, team, gyear").limit(3).execute()
             print(f"\n📋 샘플 선수 데이터:")
-            for player in sample_players.data:
-                print(f"   - {player['player_name']} ({player['position']}) - {player['team']}")
+            for stat in sample_stats.data:
+                print(f"   - {stat['player_name']} ({stat['team']}) - {stat['gyear']}년")
                 
         except Exception as e:
             print(f"❌ 검증 중 오류: {e}")

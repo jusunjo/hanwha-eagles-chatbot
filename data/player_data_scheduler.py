@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-새로운 정규화된 테이블 구조를 사용하는 선수 데이터 수집 스케줄러
-매일 밤 11시 59분에 players 테이블의 모든 선수 데이터를 수집하여 
-player_season_stats와 player_game_stats 테이블에 저장
+선수 데이터 수집 스케줄러
+매일 밤 11시 59분에 player_season_stats 테이블의 고유한 선수들을 기준으로 
+네이버 API에서 최신 데이터를 수집하여 player_season_stats와 player_game_stats 테이블에 저장
 """
 
 import os
@@ -38,31 +38,42 @@ class PlayerDataScheduler:
             print(f"❌ Supabase 연결 실패: {e}")
             raise e
     
-    def get_all_players_from_players_table(self) -> List[Dict[str, Any]]:
-        """players 테이블에서 모든 선수 조회"""
+    def get_all_players_from_season_stats(self) -> List[Dict[str, Any]]:
+        """player_season_stats 테이블에서 고유한 선수들 조회"""
         try:
-            print("🔍 players 테이블에서 모든 선수 조회 중...")
-            result = self.supabase.supabase.table("players").select("*").execute()
+            print("🔍 player_season_stats 테이블에서 고유한 선수들 조회 중...")
+            result = self.supabase.supabase.table("player_season_stats").select("player_id, player_name").execute()
             
             if result.data:
-                print(f"✅ {len(result.data)}명의 선수 조회 완료")
-                return result.data
+                # 중복 제거하여 고유한 선수들만 추출
+                unique_players = {}
+                for player in result.data:
+                    player_id = player['player_id']
+                    if player_id not in unique_players:
+                        unique_players[player_id] = {
+                            'player_id': player_id,
+                            'player_name': player['player_name']
+                        }
+                
+                player_list = list(unique_players.values())
+                print(f"✅ {len(player_list)}명의 고유한 선수 조회 완료")
+                return player_list
             else:
-                print("❌ players 테이블에 선수 데이터가 없습니다.")
+                print("❌ player_season_stats 테이블에 선수 데이터가 없습니다.")
                 return []
                 
         except Exception as e:
-            print(f"❌ players 테이블 조회 오류: {e}")
+            print(f"❌ player_season_stats 테이블 조회 오류: {e}")
             return []
     
-    def fetch_player_data_from_api(self, player_name: str, pcode: str) -> Dict[str, Any]:
+    def fetch_player_data_from_api(self, player_name: str, player_id: int) -> Dict[str, Any]:
         """네이버 API에서 선수 데이터 수집"""
         try:
             print(f"🏃 {player_name} 선수 데이터 API 요청 중...")
             
             params = {
                 'from': 'nx',
-                'playerId': pcode,
+                'playerId': str(player_id),
                 'category': 'kbo',
                 'tab': 'record'
             }
@@ -328,15 +339,15 @@ class PlayerDataScheduler:
         except (ValueError, TypeError):
             return default
     
-    def collect_all_players_data(self):
+    def run_daily_update(self):
         """모든 선수 데이터 수집 및 저장"""
         print("🚀 선수 데이터 수집 작업 시작")
         print("=" * 60)
         print(f"⏰ 시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
-            # 1. players 테이블에서 모든 선수 조회
-            players = self.get_all_players_from_players_table()
+            # 1. player_season_stats 테이블에서 고유한 선수들 조회
+            players = self.get_all_players_from_season_stats()
             
             if not players:
                 print("❌ 수집할 선수가 없습니다.")
@@ -348,10 +359,9 @@ class PlayerDataScheduler:
             
             for i, player in enumerate(players, 1):
                 player_name = player.get("player_name")
-                pcode = player.get("pcode")
-                player_id = player.get("id")
+                player_id = player.get("player_id")
                 
-                if not player_name or not pcode or not player_id:
+                if not player_name or not player_id:
                     print(f"❌ {i}/{len(players)}: 선수 정보가 불완전합니다. 건너뜁니다.")
                     fail_count += 1
                     continue
@@ -359,7 +369,7 @@ class PlayerDataScheduler:
                 print(f"\n📊 {i}/{len(players)}: {player_name} 처리 중...")
                 
                 # API에서 데이터 수집
-                player_data = self.fetch_player_data_from_api(player_name, pcode)
+                player_data = self.fetch_player_data_from_api(player_name, player_id)
                 
                 if player_data:
                     # 시즌별 통계 저장
@@ -406,7 +416,7 @@ class PlayerDataScheduler:
         
         # 매일 밤 11시 59분에 실행
         scheduler.add_job(
-            self.collect_all_players_data,
+            self.run_daily_update,
             trigger=CronTrigger(hour=23, minute=59),
             id='player_data_collection',
             name='선수 데이터 수집',
@@ -428,7 +438,7 @@ def main():
         if len(sys.argv) > 1 and sys.argv[1] == "--now":
             # 즉시 실행
             print("🚀 즉시 실행 모드")
-            scheduler.collect_all_players_data()
+            scheduler.run_daily_update()
         else:
             # 스케줄러 시작
             scheduler.start_scheduler()
