@@ -24,10 +24,10 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "hanwha-eagles-chatbot"}
 
-@app.post("/kakao")
+@app.post("")
 async def kakao_webhook(request: Request):
     """
-    Kakao chatbot webhook endpoint
+    Kakao chatbot webhook endpoint (기존 kakao_service 사용)
     """
     try:
         # 요청 데이터 파싱
@@ -43,6 +43,66 @@ async def kakao_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing Kakao request: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/kakao")
+async def kakao_rag_webhook(request: Request):
+    """
+    Kakao chatbot webhook endpoint with RAG system
+    """
+    try:
+        # 요청 데이터 파싱
+        request_data = await request.json()
+        logger.info(f"Received Kakao RAG request: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
+        
+        # 사용자 메시지 추출
+        user_message = ""
+        if "userRequest" in request_data and "utterance" in request_data["userRequest"]:
+            user_message = request_data["userRequest"]["utterance"]
+        
+        if not user_message:
+            return JSONResponse(content={
+                "version": "2.0",
+                "template": {
+                    "outputs": [{
+                        "simpleText": {
+                            "text": "메시지를 입력해주세요."
+                        }
+                    }]
+                }
+            })
+        
+        # RAG 기반 Text-to-SQL 호출
+        from rag.rag_text_to_sql import RAGTextToSQL
+        rag_text_to_sql = RAGTextToSQL()
+        answer = rag_text_to_sql.process_question(user_message)
+        
+        # 카카오 응답 형식으로 변환
+        response = {
+            "version": "2.0",
+            "template": {
+                "outputs": [{
+                    "simpleText": {
+                        "text": answer
+                    }
+                }]
+            }
+        }
+        
+        logger.info(f"Kakao RAG response: {json.dumps(response, ensure_ascii=False, indent=2)}")
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        logger.error(f"Error processing Kakao RAG request: {str(e)}")
+        return JSONResponse(content={
+            "version": "2.0",
+            "template": {
+                "outputs": [{
+                    "simpleText": {
+                        "text": f"오류가 발생했습니다: {str(e)}"
+                    }
+                }]
+            }
+        })
 
 @app.post("/test")
 async def test_endpoint(request: Request):
