@@ -55,19 +55,16 @@ class SchemaManager:
                 "game_schedule": {
                     "description": "경기 일정 및 결과를 저장하는 테이블",
                     "columns": {
-                        "game_id": {"type": "VARCHAR(50)", "primary_key": True, "description": "경기 고유 ID"},
-                        "game_date": {"type": "DATE", "description": "경기 날짜"},
-                        "game_date_time": {"type": "TIMESTAMP", "description": "경기 시작 시간"},
-                        "stadium": {"type": "VARCHAR(100)", "description": "경기장"},
+                        "id": {"type": "SERIAL", "primary_key": True, "description": "테이블 기본 키"},
+                        "game_id": {"type": "VARCHAR(50)", "description": "경기 고유 ID"},
+                        "date": {"type": "VARCHAR(20)", "description": "경기 날짜 (YYYYMMDD 형식)"},
+                        "home_team": {"type": "VARCHAR(50)", "description": "홈팀 이름"},
+                        "away_team": {"type": "VARCHAR(50)", "description": "원정팀 이름"},
                         "home_team_code": {"type": "VARCHAR(10)", "description": "홈팀 코드"},
-                        "home_team_name": {"type": "VARCHAR(50)", "description": "홈팀 이름"},
                         "away_team_code": {"type": "VARCHAR(10)", "description": "원정팀 코드"},
-                        "away_team_name": {"type": "VARCHAR(50)", "description": "원정팀 이름"},
-                        "home_team_score": {"type": "INTEGER", "description": "홈팀 점수"},
-                        "away_team_score": {"type": "INTEGER", "description": "원정팀 점수"},
-                        "winner": {"type": "VARCHAR(10)", "description": "승리팀"},
-                        "status_code": {"type": "VARCHAR(20)", "description": "경기 상태 (BEFORE, RESULT 등)"},
-                        "status_info": {"type": "VARCHAR(50)", "description": "경기 상태 정보"}
+                        "stadium": {"type": "VARCHAR(100)", "description": "경기장"},
+                        "time": {"type": "VARCHAR(20)", "description": "경기 시간"},
+                        "game_data": {"type": "JSONB", "description": "경기 상세 데이터"}
                     }
                 },
                 "game_result": {
@@ -129,6 +126,16 @@ class SchemaManager:
                     "keywords": ["우승년도", "마지막 우승", "과거 성적", "역사", "최근 경기 결과"],
                     "table": None,
                     "description": "과거 기록 관련 질문 (DB에 없음)"
+                },
+                "game_analysis": {
+                    "keywords": ["경기 분석", "경기 결과", "경기 요약", "경기 리뷰", "경기 상세", "경기 기록", "경기 통계", "경기 성과", "경기 평가", "어떻게", "어땠어", "어땠는지", "어땠나", "경기 내용", "경기 상황", "경기 흐름", "경기 정리", "경기 후기", "경기 소감", "승부는", "결과는", "스코어는", "점수는"],
+                    "table": "game_schedule",
+                    "description": "경기 분석 및 상세 정보 관련 질문 - 특정 날짜의 경기 기록을 분석하여 요약 제공"
+                },
+                "game_schedule_relative": {
+                    "keywords": ["어제 경기", "오늘 경기", "내일 경기", "최근 경기", "지난 경기", "이번 경기", "저번 경기"],
+                    "table": "game_schedule", 
+                    "description": "상대적 날짜를 포함한 경기 일정 관련 질문"
                 }
             }
         }

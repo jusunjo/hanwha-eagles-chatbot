@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS players (
 -- 2. 경기 일정 테이블
 CREATE TABLE IF NOT EXISTS game_schedule (
     id SERIAL PRIMARY KEY,
+    game_id VARCHAR(50) UNIQUE,
     date VARCHAR(20) NOT NULL,
     home_team VARCHAR(50) NOT NULL,
     away_team VARCHAR(50) NOT NULL,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS player_mapping (
 -- 4. 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_players_name ON players(player_name);
 CREATE INDEX IF NOT EXISTS idx_schedule_date ON game_schedule(date);
+CREATE INDEX IF NOT EXISTS idx_schedule_game_id ON game_schedule(game_id);
 CREATE INDEX IF NOT EXISTS idx_player_mapping_name ON player_mapping(player_name);
 CREATE INDEX IF NOT EXISTS idx_player_mapping_id ON player_mapping(player_id);
 

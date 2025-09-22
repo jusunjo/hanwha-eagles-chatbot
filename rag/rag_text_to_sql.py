@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from data.supabase_client import SupabaseManager
 from rag.schema_manager import SchemaManager
+from data.game_record_service import game_record_service
 import re
 import json
 
@@ -528,6 +529,84 @@ class RAGTextToSQL:
         try:
             print(f"🔍 RAG 기반 Text-to-SQL 처리 시작: {question}")
             
+            # 하루치 경기 일정 질문인지 확인
+            if self._is_daily_schedule_question(question):
+                print(f"🔍 하루치 경기 일정 질문 감지: {question}")
+                import asyncio
+                import threading
+                
+                def run_in_thread():
+                    # 새로운 스레드에서 새로운 이벤트 루프 실행
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(self._handle_daily_schedule_question(question))
+                    finally:
+                        loop.close()
+                
+                try:
+                    # 스레드에서 비동기 함수 실행
+                    result = [None]
+                    thread = threading.Thread(target=lambda: result.__setitem__(0, run_in_thread()))
+                    thread.start()
+                    thread.join()
+                    return result[0] if result[0] else "하루치 경기 일정 처리 중 오류가 발생했습니다."
+                except Exception as e:
+                    print(f"❌ 비동기 처리 오류: {e}")
+                    return "하루치 경기 일정 처리 중 오류가 발생했습니다."
+            
+            # 하루치 경기 결과 질문인지 확인
+            elif self._is_daily_games_question(question):
+                print(f"🔍 하루치 경기 결과 질문 감지: {question}")
+                import asyncio
+                import threading
+                
+                def run_in_thread():
+                    # 새로운 스레드에서 새로운 이벤트 루프 실행
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(self._handle_daily_games_analysis(question))
+                    finally:
+                        loop.close()
+                
+                try:
+                    # 스레드에서 비동기 함수 실행
+                    result = [None]
+                    thread = threading.Thread(target=lambda: result.__setitem__(0, run_in_thread()))
+                    thread.start()
+                    thread.join()
+                    return result[0] if result[0] else "하루치 경기 분석 처리 중 오류가 발생했습니다."
+                except Exception as e:
+                    print(f"❌ 비동기 처리 오류: {e}")
+                    return "하루치 경기 분석 처리 중 오류가 발생했습니다."
+            
+            # 경기 분석 질문인지 확인
+            elif self._is_game_analysis_question(question):
+                print(f"🔍 경기 분석 질문 감지: {question}")
+                import asyncio
+                import threading
+                
+                def run_in_thread():
+                    # 새로운 스레드에서 새로운 이벤트 루프 실행
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(self._handle_game_analysis_question(question))
+                    finally:
+                        loop.close()
+                
+                try:
+                    # 스레드에서 비동기 함수 실행
+                    result = [None]
+                    thread = threading.Thread(target=lambda: result.__setitem__(0, run_in_thread()))
+                    thread.start()
+                    thread.join()
+                    return result[0] if result[0] else "경기 분석 처리 중 오류가 발생했습니다."
+                except Exception as e:
+                    print(f"❌ 비동기 처리 오류: {e}")
+                    return "경기 분석 처리 중 오류가 발생했습니다."
+            
             # SQL 생성
             sql = self.generate_sql(question)
             if not sql:
@@ -545,6 +624,694 @@ class RAGTextToSQL:
         except Exception as e:
             print(f"❌ RAG 기반 Text-to-SQL 처리 오류: {e}")
             return f"처리 중 오류가 발생했습니다: {str(e)}"
+    
+    def _is_game_analysis_question(self, question: str) -> bool:
+        """경기 분석 질문인지 판단 (RAG 기반)"""
+        try:
+            # 스키마 매니저를 통해 관련 정보 검색
+            relevant_schema = self.schema_manager.get_relevant_schema(question, top_k=3)
+            
+            # 질문 유형 확인
+            question_types = relevant_schema.get("question_types", [])
+            
+            # 경기 분석 관련 질문 유형들
+            game_analysis_types = [
+                "game_analysis", "game_review", "game_summary", 
+                "game_result", "game_detail", "game_record"
+            ]
+            
+            # 질문 유형에서 경기 분석 관련 키워드 확인
+            for qtype_info in question_types:
+                content = qtype_info.get("content", "").lower()
+                if any(keyword in content for keyword in ["경기", "game", "결과", "분석", "요약", "리뷰"]):
+                    # 날짜 정보도 함께 있는지 확인
+                    if self._has_date_reference(question):
+                        return True
+            
+            # 직접적인 경기 분석 키워드 확인 (최소한의 키워드)
+            question_lower = question.lower()
+            direct_keywords = ["경기 분석", "경기 결과", "경기 요약", "경기 리뷰"]
+            
+            if any(keyword in question_lower for keyword in direct_keywords):
+                return True
+            
+            # 날짜 + 경기 관련 질문인지 확인
+            if self._has_date_reference(question) and self._has_game_reference(question):
+                return True
+                
+            return False
+            
+        except Exception as e:
+            print(f"❌ 경기 분석 질문 판단 오류: {e}")
+            return False
+    
+    def _has_date_reference(self, question: str) -> bool:
+        """날짜 참조가 있는지 확인"""
+        # 구체적 날짜 패턴
+        specific_date_patterns = [
+            r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일',
+            r'\d{4}-\d{1,2}-\d{1,2}',
+            r'\d{1,2}/\d{1,2}',
+            r'\d{1,2}월\s*\d{1,2}일'
+        ]
+        
+        # 상대적 날짜 패턴
+        relative_date_patterns = [
+            '어제', '오늘', '내일', '최근', '지난', '이번', '저번'
+        ]
+        
+        has_specific_date = any(re.search(pattern, question) for pattern in specific_date_patterns)
+        has_relative_date = any(pattern in question.lower() for pattern in relative_date_patterns)
+        
+        return has_specific_date or has_relative_date
+    
+    def _has_game_reference(self, question: str) -> bool:
+        """경기 관련 참조가 있는지 확인"""
+        question_lower = question.lower()
+        game_keywords = [
+            '경기', '게임', '승부', '결과', '스코어', '점수',
+            '승리', '패배', '무승부', '어땠어', '어땠나', '어떻게'
+        ]
+        
+        return any(keyword in question_lower for keyword in game_keywords)
+    
+    def _is_daily_games_question(self, question: str) -> bool:
+        """하루치 모든 경기 결과를 요청하는 질문인지 판단"""
+        question_lower = question.lower()
+        
+        # 경기 결과 관련 키워드들 (과거 경기 결과)
+        result_keywords = [
+            '경기 결과', '경기들', '모든 경기', '전체 경기', '그날 경기',
+            '경기 현황', '경기 상황', '오늘의 경기', '어제의 경기', 
+            '경기 요약', '어땠어', '어땠나', '어떻게 됐', '분석'
+        ]
+        
+        # 경기 일정 관련 키워드들 (미래 경기 일정)
+        schedule_keywords = [
+            '경기 일정', '일정', '스케줄', '예정', '앞으로', '다음', '내일의 경기'
+        ]
+        
+        # 특정 팀이 언급되지 않은 경우
+        team_keywords = [
+            '한화', '두산', 'KIA', '키움', '롯데', '삼성', 'SSG', 'KT', 'NC', 'LG',
+            '이글스', '베어스', '타이거즈', '히어로즈', '자이언츠', '라이온즈',
+            '랜더스', '위즈', '다이노스', '트윈스'
+        ]
+        
+        has_result_keyword = any(keyword in question_lower for keyword in result_keywords)
+        has_schedule_keyword = any(keyword in question_lower for keyword in schedule_keywords)
+        has_team_keyword = any(keyword in question_lower for keyword in team_keywords)
+        
+        # 경기 결과 키워드가 있고, 일정 키워드가 없으며, 특정 팀이 언급되지 않은 경우
+        return has_result_keyword and not has_schedule_keyword and not has_team_keyword
+    
+    def _is_daily_schedule_question(self, question: str) -> bool:
+        """하루치 경기 일정을 요청하는 질문인지 판단"""
+        question_lower = question.lower()
+        
+        # 경기 일정 관련 키워드들
+        schedule_keywords = [
+            '경기 일정', '일정', '스케줄', '예정', '앞으로', '다음'
+        ]
+        
+        # 특정 팀이 언급되지 않은 경우
+        team_keywords = [
+            '한화', '두산', 'KIA', '키움', '롯데', '삼성', 'SSG', 'KT', 'NC', 'LG',
+            '이글스', '베어스', '타이거즈', '히어로즈', '자이언츠', '라이온즈',
+            '랜더스', '위즈', '다이노스', '트윈스'
+        ]
+        
+        has_schedule_keyword = any(keyword in question_lower for keyword in schedule_keywords)
+        has_team_keyword = any(keyword in question_lower for keyword in team_keywords)
+        
+        # 일정 키워드가 있고 특정 팀이 언급되지 않은 경우
+        return has_schedule_keyword and not has_team_keyword
+    
+    async def _handle_daily_schedule_question(self, question: str) -> str:
+        """하루치 경기 일정 처리"""
+        try:
+            print(f"🔍 하루치 경기 일정 질문 처리 시작: {question}")
+            
+            # 하루치 경기 일정 조회
+            daily_games = await self._find_daily_games_via_sql(question)
+            
+            if not daily_games:
+                return "해당 날짜의 경기 일정을 찾을 수 없습니다."
+            
+            print(f"🔍 조회된 경기 일정 수: {len(daily_games)}개")
+            
+            # 경기 일정 요약 생성
+            schedule_summary = self._generate_daily_schedule_summary(daily_games)
+            
+            print(f"✅ 하루치 경기 일정 처리 완료: {len(daily_games)}개 경기")
+            return schedule_summary
+                
+        except Exception as e:
+            print(f"❌ 하루치 경기 일정 처리 오류: {e}")
+            return f"경기 일정 처리 중 오류가 발생했습니다: {str(e)}"
+    
+    def _generate_daily_schedule_summary(self, daily_games: list) -> str:
+        """하루치 경기 일정 요약 생성"""
+        try:
+            if not daily_games:
+                return "경기 일정이 없습니다."
+            
+            # 첫 번째 경기의 날짜 사용
+            first_game_date = daily_games[0].get('game_date', '')
+            if first_game_date and len(first_game_date) >= 10:
+                formatted_date = f"{first_game_date[:4]}년 {first_game_date[5:7]}월 {first_game_date[8:10]}일"
+            else:
+                formatted_date = first_game_date
+            
+            # 전체 일정 시작
+            summary = f"📅 {formatted_date} KBO 경기 일정 ({len(daily_games)}경기)\n"
+            summary += "=" * 50 + "\n\n"
+            
+            # 각 경기 일정 추가
+            for i, game in enumerate(daily_games, 1):
+                home_team = game.get('home_team_name', '')
+                away_team = game.get('away_team_name', '')
+                stadium = game.get('stadium', '')
+                game_time = game.get('game_date_time', '')
+                status_code = game.get('status_code', '')
+                
+                # 시간 포맷팅
+                if game_time and len(game_time) >= 16:
+                    # 2025-09-22T18:30:00+00:00 -> 18:30
+                    time_part = game_time[11:16]
+                else:
+                    time_part = "시간 미정"
+                
+                summary += f"🏟️ 경기 {i}: {away_team} vs {home_team}\n"
+                summary += f"   📍 경기장: {stadium}\n"
+                summary += f"   ⏰ 경기시간: {time_part}\n"
+                
+                # 경기 상태에 따른 추가 정보
+                if status_code == 'BEFORE':
+                    summary += f"   📋 상태: 예정\n"
+                elif status_code == 'LIVE':
+                    summary += f"   📋 상태: 진행중\n"
+                elif status_code == 'RESULT':
+                    summary += f"   📋 상태: 종료\n"
+                else:
+                    summary += f"   📋 상태: {status_code}\n"
+                
+                summary += "\n"
+            
+            return summary
+            
+        except Exception as e:
+            print(f"❌ 하루치 일정 요약 생성 오류: {e}")
+            return f"{len(daily_games)}개 경기가 예정되어 있습니다."
+    
+    async def _handle_daily_games_analysis(self, question: str) -> str:
+        """하루치 모든 경기 분석 처리"""
+        try:
+            print(f"🔍 하루치 경기 분석 질문 처리 시작: {question}")
+            
+            # 하루치 모든 경기 정보 조회
+            daily_games = await self._find_daily_games_via_sql(question)
+            
+            if not daily_games:
+                return "해당 날짜의 경기 정보를 찾을 수 없습니다."
+            
+            print(f"🔍 조회된 경기 수: {len(daily_games)}개")
+            
+            # 각 경기에 대해 분석 수행
+            game_summaries = []
+            
+            for i, game_info in enumerate(daily_games):
+                game_id = game_info.get('game_id')
+                if not game_id:
+                    continue
+                
+                print(f"🔍 경기 {i+1}/{len(daily_games)} 분석 중: {game_id}")
+                
+                try:
+                    # 경기 기록 데이터 가져오기
+                    record_data = await game_record_service.get_game_record(game_id)
+                    
+                    if not record_data:
+                        # API 데이터가 없는 경우 기본 정보만 사용
+                        summary = self._generate_basic_game_summary(game_info)
+                        game_summaries.append(summary)
+                        continue
+                    
+                    # 경기 데이터 분석
+                    analysis = game_record_service.analyze_game_record(record_data)
+                    
+                    # 자연어 요약 생성
+                    summary = game_record_service.generate_game_summary(analysis)
+                    game_summaries.append(summary)
+                    
+                except Exception as e:
+                    print(f"❌ 경기 {game_id} 분석 오류: {e}")
+                    # 오류 발생 시 기본 정보라도 제공
+                    summary = self._generate_basic_game_summary(game_info)
+                    game_summaries.append(summary)
+            
+            # 전체 요약 생성
+            if game_summaries:
+                final_summary = self._generate_daily_summary(daily_games, game_summaries)
+                print(f"✅ 하루치 경기 분석 완료: {len(daily_games)}개 경기")
+                return final_summary
+            else:
+                return "경기 분석 중 오류가 발생했습니다."
+                
+        except Exception as e:
+            print(f"❌ 하루치 경기 분석 오류: {e}")
+            return f"경기 분석 중 오류가 발생했습니다: {str(e)}"
+    
+    def _generate_basic_game_summary(self, game_info: dict) -> str:
+        """기본 경기 정보로 요약 생성"""
+        try:
+            game_date = game_info.get('game_date', '')
+            home_team = game_info.get('home_team_name', '')
+            away_team = game_info.get('away_team_name', '')
+            stadium = game_info.get('stadium', '')
+            home_score = game_info.get('home_team_score', 0)
+            away_score = game_info.get('away_team_score', 0)
+            winner = game_info.get('winner', '')
+            status_info = game_info.get('status_info', '')
+            
+            # 날짜 포맷팅
+            if game_date and len(game_date) >= 10:
+                formatted_date = f"{game_date[:4]}년 {game_date[5:7]}월 {game_date[8:10]}일"
+            else:
+                formatted_date = game_date
+            
+            # 기본 요약
+            summary = f"📅 {formatted_date} {stadium}에서 열린 {away_team} vs {home_team} 경기\n"
+            
+            # 승부 결과
+            if winner == 'HOME':
+                summary += f"🏆 {home_team} {home_score} - {away_score} {away_team}로 승리"
+            elif winner == 'AWAY':
+                summary += f"🏆 {away_team} {away_score} - {home_score} {home_team}로 승리"
+            else:
+                summary += f"🏆 {away_team} {away_score} - {home_score} {home_team}"
+            
+            if status_info:
+                summary += f"\n⚾ 경기 상황: {status_info}"
+            
+            return summary
+            
+        except Exception as e:
+            print(f"❌ 기본 경기 요약 생성 오류: {e}")
+            return f"경기 정보: {game_info.get('home_team_name', '')} vs {game_info.get('away_team_name', '')}"
+    
+    def _generate_daily_summary(self, daily_games: list, game_summaries: list) -> str:
+        """하루치 경기 전체 요약 생성"""
+        try:
+            if not daily_games:
+                return "경기 정보가 없습니다."
+            
+            # 첫 번째 경기의 날짜 사용
+            first_game_date = daily_games[0].get('game_date', '')
+            if first_game_date and len(first_game_date) >= 10:
+                formatted_date = f"{first_game_date[:4]}년 {first_game_date[5:7]}월 {first_game_date[8:10]}일"
+            else:
+                formatted_date = first_game_date
+            
+            # 전체 요약 시작
+            summary = f"📅 {formatted_date} KBO 경기 결과 ({len(daily_games)}경기)\n"
+            summary += "=" * 50 + "\n\n"
+            
+            # 각 경기 요약 추가
+            for i, game_summary in enumerate(game_summaries, 1):
+                summary += f"🏟️ 경기 {i}:\n"
+                summary += game_summary + "\n\n"
+            
+            # 간단한 통계 추가
+            home_wins = sum(1 for game in daily_games if game.get('winner') == 'HOME')
+            away_wins = sum(1 for game in daily_games if game.get('winner') == 'AWAY')
+            
+            summary += f"📊 경기 결과 요약:\n"
+            summary += f"   홈팀 승리: {home_wins}경기\n"
+            summary += f"   원정팀 승리: {away_wins}경기\n"
+            
+            return summary
+            
+        except Exception as e:
+            print(f"❌ 하루치 요약 생성 오류: {e}")
+            return f"{len(daily_games)}개 경기가 있었습니다."
+    
+    async def _handle_game_analysis_question(self, question: str) -> str:
+        """경기 분석 질문 처리"""
+        try:
+            print(f"🔍 경기 분석 질문 처리 시작: {question}")
+            
+            # SQL을 통해 경기 정보 조회
+            game_info = await self._find_game_info_via_sql(question)
+            
+            if not game_info:
+                return "해당 조건에 맞는 경기 정보를 찾을 수 없습니다."
+            
+            game_id = game_info.get('game_id')
+            if not game_id:
+                return "경기 ID를 찾을 수 없습니다."
+            
+            print(f"🔍 찾은 게임 ID: {game_id}")
+            
+            # 경기 기록 데이터 가져오기
+            record_data = await game_record_service.get_game_record(game_id)
+            
+            if not record_data:
+                return f"경기 기록 데이터를 가져올 수 없습니다."
+            
+            # 경기 데이터 분석
+            analysis = game_record_service.analyze_game_record(record_data)
+            
+            # 자연어 요약 생성
+            summary = game_record_service.generate_game_summary(analysis)
+            
+            print(f"✅ 경기 분석 완료")
+            return summary
+            
+        except Exception as e:
+            print(f"❌ 경기 분석 처리 오류: {e}")
+            return f"경기 분석 중 오류가 발생했습니다: {str(e)}"
+    
+    def _extract_date_from_question(self, question: str) -> str:
+        """질문에서 날짜 정보 추출"""
+        # YYYY년 MM월 DD일 패턴
+        pattern1 = r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일'
+        match1 = re.search(pattern1, question)
+        if match1:
+            year, month, day = match1.groups()
+            return f"{year}{month.zfill(2)}{day.zfill(2)}"
+        
+        # YYYY-MM-DD 패턴
+        pattern2 = r'(\d{4})-(\d{1,2})-(\d{1,2})'
+        match2 = re.search(pattern2, question)
+        if match2:
+            year, month, day = match2.groups()
+            return f"{year}{month.zfill(2)}{day.zfill(2)}"
+        
+        # MM/DD 패턴 (올해 기준)
+        pattern3 = r'(\d{1,2})/(\d{1,2})'
+        match3 = re.search(pattern3, question)
+        if match3:
+            from datetime import datetime
+            month, day = match3.groups()
+            current_year = datetime.now().year
+            return f"{current_year}{month.zfill(2)}{day.zfill(2)}"
+        
+        # MM월 DD일 패턴 (올해 기준)
+        pattern4 = r'(\d{1,2})월\s*(\d{1,2})일'
+        match4 = re.search(pattern4, question)
+        if match4:
+            from datetime import datetime
+            month, day = match4.groups()
+            current_year = datetime.now().year
+            return f"{current_year}{month.zfill(2)}{day.zfill(2)}"
+        
+        return None
+    
+    def _extract_team_from_question(self, question: str) -> str:
+        """질문에서 팀 정보 추출"""
+        team_mappings = {
+            '한화': '한화', '한화이글스': '한화', '이글스': '한화',
+            '두산': '두산', '두산베어스': '두산', '베어스': '두산',
+            'KIA': 'KIA', 'KIA타이거즈': 'KIA', '타이거즈': 'KIA',
+            '키움': '키움', '키움히어로즈': '키움', '히어로즈': '키움',
+            '롯데': '롯데', '롯데자이언츠': '롯데', '자이언츠': '롯데',
+            '삼성': '삼성', '삼성라이온즈': '삼성', '라이온즈': '삼성',
+            'SSG': 'SSG', 'SSG랜더스': 'SSG', '랜더스': 'SSG',
+            'KT': 'KT', 'KT위즈': 'KT', '위즈': 'KT',
+            'NC': 'NC', 'NC다이노스': 'NC', '다이노스': 'NC',
+            'LG': 'LG', 'LG트윈스': 'LG', '트윈스': 'LG'
+        }
+        
+        for team_keyword, team_name in team_mappings.items():
+            if team_keyword in question:
+                return team_name
+        
+        return None
+    
+    async def _find_game_info_via_sql(self, question: str) -> dict:
+        """SQL을 통해 경기 정보 조회"""
+        try:
+            from datetime import datetime, timedelta
+            
+            # 질문에서 날짜와 팀 정보 추출
+            date_info = self._extract_date_from_question(question)
+            team_info = self._extract_team_from_question(question)
+            
+            print(f"🔍 추출된 날짜: {date_info}")
+            print(f"🔍 추출된 팀: {team_info}")
+            
+            # 상대적 날짜 처리
+            if not date_info:
+                date_info = self._extract_relative_date(question)
+                print(f"🔍 상대적 날짜 추출 결과: {date_info}")
+            
+            # SQL 쿼리 구성
+            query = self.supabase.supabase.table("game_schedule").select("*")
+            
+            # 날짜 조건 추가 (있는 경우에만) - 실제 컬럼명은 game_date
+            if date_info:
+                # YYYYMMDD 형식을 YYYY-MM-DD 형식으로 변환
+                if len(date_info) == 8:
+                    formatted_date = f"{date_info[:4]}-{date_info[4:6]}-{date_info[6:8]}"
+                    query = query.eq("game_date", formatted_date)
+                else:
+                    query = query.eq("game_date", date_info)
+            
+            # 팀 조건 추가
+            if team_info:
+                # 팀 코드 매핑
+                team_code_mapping = {
+                    '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
+                    '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
+                    'NC': 'NC', 'LG': 'LG'
+                }
+                
+                team_code = team_code_mapping.get(team_info, team_info)
+                # Supabase OR 조건을 두 개의 쿼리로 분리하여 처리
+                # 먼저 홈팀 조건으로 조회
+                home_query = self.supabase.supabase.table("game_schedule").select("*")
+                if date_info:
+                    # YYYYMMDD 형식을 YYYY-MM-DD 형식으로 변환
+                    if len(date_info) == 8:
+                        formatted_date = f"{date_info[:4]}-{date_info[4:6]}-{date_info[6:8]}"
+                        home_query = home_query.eq("game_date", formatted_date)
+                    else:
+                        home_query = home_query.eq("game_date", date_info)
+                home_query = home_query.eq("home_team_code", team_code).order("game_date", desc=True).limit(1)
+                home_result = home_query.execute()
+                
+                if home_result.data:
+                    return home_result.data[0]
+                
+                # 홈팀 조건에서 결과가 없으면 원정팀 조건으로 조회
+                away_query = self.supabase.supabase.table("game_schedule").select("*")
+                if date_info:
+                    # YYYYMMDD 형식을 YYYY-MM-DD 형식으로 변환
+                    if len(date_info) == 8:
+                        formatted_date = f"{date_info[:4]}-{date_info[4:6]}-{date_info[6:8]}"
+                        away_query = away_query.eq("game_date", formatted_date)
+                    else:
+                        away_query = away_query.eq("game_date", date_info)
+                away_query = away_query.eq("away_team_code", team_code).order("game_date", desc=True).limit(1)
+                away_result = away_query.execute()
+                
+                if away_result.data:
+                    return away_result.data[0]
+                
+                return None
+            
+            # 최신 경기 우선 정렬
+            query = query.order("game_date", desc=True).limit(1)
+            
+            result = query.execute()
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            
+            # 날짜 정보가 없는 경우 최근 경기 조회 시도
+            if not date_info and team_info:
+                print("🔍 날짜 정보가 없어서 최근 경기 조회 시도")
+                return await self._find_recent_games_without_date(team_info)
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ SQL 기반 경기 정보 조회 오류: {e}")
+            return None
+    
+    async def _find_daily_games_via_sql(self, question: str) -> list:
+        """SQL을 통해 하루치 모든 경기 정보 조회"""
+        try:
+            from datetime import datetime, timedelta
+            
+            # 질문에서 날짜와 팀 정보 추출
+            date_info = self._extract_date_from_question(question)
+            team_info = self._extract_team_from_question(question)
+            
+            print(f"🔍 추출된 날짜: {date_info}")
+            print(f"🔍 추출된 팀: {team_info}")
+            
+            # 상대적 날짜 처리 (날짜가 없는 경우)
+            if not date_info:
+                relative_date = self._extract_relative_date(question)
+                if relative_date:
+                    date_info = relative_date
+                    print(f"🔍 상대적 날짜 추출 결과: {date_info}")
+            
+            # 날짜가 없으면 최근 경기 날짜 조회
+            if not date_info:
+                # 가장 최근 경기 날짜 조회
+                recent_query = self.supabase.supabase.table("game_schedule").select("game_date").order("game_date", desc=True).limit(1)
+                recent_result = recent_query.execute()
+                if recent_result.data:
+                    date_info = recent_result.data[0]['game_date']
+                    print(f"🔍 최근 경기 날짜: {date_info}")
+            
+            if not date_info:
+                print("❌ 조회할 날짜를 찾을 수 없습니다.")
+                return []
+            
+            # SQL 쿼리 구성 - 해당 날짜의 모든 경기
+            query = self.supabase.supabase.table("game_schedule").select("*")
+            
+            # 날짜 조건 추가 - 실제 컬럼명은 game_date
+            if len(date_info) == 8:  # YYYYMMDD 형식
+                formatted_date = f"{date_info[:4]}-{date_info[4:6]}-{date_info[6:8]}"
+                query = query.eq("game_date", formatted_date)
+            else:  # YYYY-MM-DD 형식
+                query = query.eq("game_date", date_info)
+            
+            # 팀 조건이 있는 경우 필터링
+            if team_info:
+                team_code_mapping = {
+                    '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
+                    '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
+                    'NC': 'NC', 'LG': 'LG'
+                }
+                team_code = team_code_mapping.get(team_info, team_info)
+                
+                # 홈팀 또는 원정팀 조건으로 필터링 - 두 개의 쿼리로 분리
+                # 먼저 홈팀 조건으로 조회
+                home_query = self.supabase.supabase.table("game_schedule").select("*")
+                if len(date_info) == 8:  # YYYYMMDD 형식
+                    formatted_date = f"{date_info[:4]}-{date_info[4:6]}-{date_info[6:8]}"
+                    home_query = home_query.eq("game_date", formatted_date)
+                else:  # YYYY-MM-DD 형식
+                    home_query = home_query.eq("game_date", date_info)
+                home_query = home_query.eq("home_team_code", team_code).order("game_date_time")
+                home_result = home_query.execute()
+                
+                # 원정팀 조건으로 조회
+                away_query = self.supabase.supabase.table("game_schedule").select("*")
+                if len(date_info) == 8:  # YYYYMMDD 형식
+                    formatted_date = f"{date_info[:4]}-{date_info[4:6]}-{date_info[6:8]}"
+                    away_query = away_query.eq("game_date", formatted_date)
+                else:  # YYYY-MM-DD 형식
+                    away_query = away_query.eq("game_date", date_info)
+                away_query = away_query.eq("away_team_code", team_code).order("game_date_time")
+                away_result = away_query.execute()
+                
+                # 결과 합치기
+                all_games = []
+                if home_result.data:
+                    all_games.extend(home_result.data)
+                if away_result.data:
+                    all_games.extend(away_result.data)
+                
+                # 중복 제거 (game_id 기준)
+                seen_ids = set()
+                unique_games = []
+                for game in all_games:
+                    game_id = game.get('game_id')
+                    if game_id and game_id not in seen_ids:
+                        seen_ids.add(game_id)
+                        unique_games.append(game)
+                
+                return unique_games
+            
+            # 시간 순으로 정렬
+            result = query.order("game_date_time").execute()
+            
+            if result.data:
+                print(f"✅ {date_info} 날짜 경기 {len(result.data)}개 조회 성공")
+                return result.data
+            else:
+                print(f"❌ {date_info} 날짜에 경기를 찾을 수 없음")
+                return []
+                
+        except Exception as e:
+            print(f"❌ 하루치 경기 정보 조회 오류: {e}")
+            return []
+    
+    def _extract_relative_date(self, question: str) -> str:
+        """질문에서 상대적 날짜 추출 (YYYY-MM-DD 형식)"""
+        from datetime import datetime, timedelta
+        
+        question_lower = question.lower()
+        
+        if '어제' in question_lower:
+            yesterday = datetime.now() - timedelta(days=1)
+            return yesterday.strftime("%Y-%m-%d")
+        elif '오늘' in question_lower:
+            today = datetime.now()
+            return today.strftime("%Y-%m-%d")
+        elif '내일' in question_lower:
+            tomorrow = datetime.now() + timedelta(days=1)
+            return tomorrow.strftime("%Y-%m-%d")
+        elif '최근' in question_lower or '지난' in question_lower:
+            # 최근 7일 내의 경기 중 가장 최근 경기
+            recent_date = datetime.now() - timedelta(days=1)
+            return recent_date.strftime("%Y-%m-%d")
+        
+        return None
+    
+    async def _find_recent_games_without_date(self, team_info: str = None) -> dict:
+        """날짜 정보가 없는 경우 최근 경기 조회"""
+        try:
+            query = self.supabase.supabase.table("game_schedule").select("*")
+            
+            # 팀 조건 추가
+            if team_info:
+                team_code_mapping = {
+                    '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
+                    '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
+                    'NC': 'NC', 'LG': 'LG'
+                }
+                
+                team_code = team_code_mapping.get(team_info, team_info)
+                # Supabase OR 조건을 두 개의 쿼리로 분리하여 처리
+                # 먼저 홈팀 조건으로 조회
+                home_query = self.supabase.supabase.table("game_schedule").select("*")
+                home_query = home_query.eq("home_team_code", team_code).order("game_date", desc=True).limit(1)
+                home_result = home_query.execute()
+                
+                if home_result.data:
+                    return home_result.data[0]
+                
+                # 홈팀 조건에서 결과가 없으면 원정팀 조건으로 조회
+                away_query = self.supabase.supabase.table("game_schedule").select("*")
+                away_query = away_query.eq("away_team_code", team_code).order("game_date", desc=True).limit(1)
+                away_result = away_query.execute()
+                
+                if away_result.data:
+                    return away_result.data[0]
+                
+                return None
+            
+            # 최신 경기 우선 정렬 (날짜 내림차순)
+            query = query.order("game_date", desc=True).limit(1)
+            
+            result = query.execute()
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ 최근 경기 조회 오류: {e}")
+            return None
 
 def main():
     """테스트 함수"""
