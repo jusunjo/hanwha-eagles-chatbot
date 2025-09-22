@@ -6,14 +6,14 @@ import json
 import asyncio
 import httpx
 from typing import Dict, Any
-from rag.text_to_sql import TextToSQL
+from rag.rag_text_to_sql import RAGTextToSQL
 
 
 class KakaoService:
     """Service for handling Kakao chatbot requests with Hanwha Eagles data."""
     
     def __init__(self):
-        self.text_to_sql = TextToSQL()
+        self.rag_text_to_sql = RAGTextToSQL()
     
     async def process_kakao_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -73,7 +73,7 @@ class KakaoService:
                     
                     # Text-to-SQL 서비스 호출
                     loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, self.text_to_sql.process_question, question)
+                    result = await loop.run_in_executor(None, self.rag_text_to_sql.process_question, question)
                     
                     if result:
                         response_text = result
@@ -205,7 +205,7 @@ class KakaoService:
                 # 4초 동안 챗봇 작업이 완료되는지 기다림
                 loop = asyncio.get_event_loop()
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(None, self.text_to_sql.process_question, question),
+                    loop.run_in_executor(None, self.rag_text_to_sql.process_question, question),
                     timeout=3.0
                 )
                 
