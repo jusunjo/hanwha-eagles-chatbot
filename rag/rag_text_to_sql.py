@@ -447,7 +447,15 @@ class RAGTextToSQL:
             
             if not data:
                 print("❌ 데이터가 없어서 적절한 응답 반환")
-                return "DB_ERROR: 데이터베이스에서 해당 질문에 대한 데이터를 찾을 수 없습니다."
+                # 질문 유형에 따라 다른 메시지 반환
+                if any(keyword in question for keyword in ["오늘", "내일", "경기", "일정", "경기일정"]):
+                    return "해당 날짜에 예정된 경기가 없습니다."
+                elif any(keyword in question for keyword in ["선수", "성적", "통계", "기록"]):
+                    return "해당 조건에 맞는 선수 데이터를 찾을 수 없습니다."
+                elif any(keyword in question for keyword in ["순위", "등수", "위치"]):
+                    return "해당 조건에 맞는 순위 데이터를 찾을 수 없습니다."
+                else:
+                    return "요청하신 정보를 찾을 수 없습니다."
             
             # DB 에러 메시지가 포함된 데이터인지 확인
             if isinstance(data, list) and len(data) > 0:
