@@ -94,11 +94,21 @@ class SchemaManager:
                 "롯데": "LT", "삼성": "SS", "SSG": "SK", "KT": "KT",
                 "NC": "NC", "LG": "LG"
             },
+            "team_stadiums": {
+                "한화": "대전", "두산": "잠실", "KIA": "광주", "키움": "고척",
+                "롯데": "부산", "삼성": "대구", "SSG": "문학", "KT": "수원",
+                "NC": "창원", "LG": "잠실"
+            },
             "question_types": {
                 "schedule": {
                     "keywords": ["일정", "경기", "오늘", "내일", "어제", "다음", "이번 주", "스케줄"],
                     "table": "game_schedule",
                     "description": "경기 일정 관련 질문"
+                },
+                "game_prediction": {
+                    "keywords": ["이길", "질 것", "예상", "승부", "누가", "어떤 팀", "결과", "예측"],
+                    "table": "game_schedule",
+                    "description": "경기 결과 예측 관련 질문 - 팀별 최근 성적과 상대 전적을 고려한 예측 제공"
                 },
                 "player_stats": {
                     "keywords": ["성적", "어때", "어떻게", "통계", "타율", "홈런", "홈런개수", "home runs", "home_runs", "ERA", "승수", "타점", "RBI", "세이브", "홀드"],
@@ -155,6 +165,10 @@ class SchemaManager:
             # 팀 매핑 정보 추가
             team_doc = "팀 코드 매핑:\n" + json.dumps(self.schema_info["team_mappings"], ensure_ascii=False, indent=2)
             documents.append(Document(page_content=team_doc, metadata={"type": "team_mappings"}))
+            
+            # 팀 홈구장 정보 추가
+            stadium_doc = "팀 홈구장 매핑:\n" + json.dumps(self.schema_info["team_stadiums"], ensure_ascii=False, indent=2)
+            documents.append(Document(page_content=stadium_doc, metadata={"type": "team_stadiums"}))
             
             # 질문 유형 정보 추가
             for qtype, qinfo in self.schema_info["question_types"].items():
@@ -245,7 +259,9 @@ class SchemaManager:
 2. 질문에 언급된 팀명을 그대로 사용하세요
 3. 선수명은 그대로 사용하세요 (팀 코드로 변환하지 마세요)
 4. **중요**: 현재 시즌 데이터를 조회할 때는 반드시 gyear = '2025' 조건을 포함하세요
-5. 컬럼명 매핑 규칙:
+5. **경기 예측 질문의 경우**: 팀별 최근 성적과 상대 전적을 고려하여 구체적인 예측을 제공하세요
+6. **홈구장 정보**: 롯데는 부산, 한화는 대전, 삼성은 대구, SSG는 문학, KT는 수원, NC는 창원, KIA는 광주, 키움은 고척, 두산/LG는 잠실
+7. 컬럼명 매핑 규칙:
    - "선수명", "player name", "name" → player_name 컬럼 사용
    - "홈런", "홈런개수", "home runs", "home_runs" → hr 컬럼 사용
    - "타율", "batting average", "avg" → hra 컬럼 사용
