@@ -246,6 +246,7 @@ class SchemaManager:
 3. 선수명은 그대로 사용하세요 (팀 코드로 변환하지 마세요)
 4. **중요**: 현재 시즌 데이터를 조회할 때는 반드시 gyear = '2025' 조건을 포함하세요
 5. 컬럼명 매핑 규칙:
+   - "선수명", "player name", "name" → player_name 컬럼 사용
    - "홈런", "홈런개수", "home runs", "home_runs" → hr 컬럼 사용
    - "타율", "batting average", "avg" → hra 컬럼 사용
    - "타점", "RBI", "runs batted in" → rbi 컬럼 사용
