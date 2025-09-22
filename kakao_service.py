@@ -6,14 +6,14 @@ import json
 import asyncio
 import httpx
 from typing import Dict, Any
-from rag.text_to_sql import TextToSQL
+from rag.rag_text_to_sql import RAGTextToSQL
 
 
 class KakaoService:
     """Service for handling Kakao chatbot requests with Hanwha Eagles data."""
     
     def __init__(self):
-        self.text_to_sql = TextToSQL()
+        self.text_to_sql = RAGTextToSQL()
     
     async def process_kakao_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
