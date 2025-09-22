@@ -82,7 +82,7 @@ async def rag_test_endpoint(request: Request):
         # RAG 기반 Text-to-SQL 호출
         from rag.rag_text_to_sql import RAGTextToSQL
         rag_text_to_sql = RAGTextToSQL()
-        answer = rag_text_to_sql.process_question(question)
+        answer = await rag_text_to_sql.process_question(question)
         
         return JSONResponse(content={"answer": answer})
         

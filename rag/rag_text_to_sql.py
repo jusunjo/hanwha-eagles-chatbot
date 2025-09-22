@@ -456,6 +456,18 @@ class RAGTextToSQL:
                     print("❌ DB 에러 감지 - 에러 메시지 반환")
                     return data[0]
             
+            # 경기 상태 확인 및 분기 처리 (동기 버전)
+            game_status_info = self._check_game_status_from_data(data)
+            
+            # 경기 상태에 따른 다른 처리 (데이터베이스 상태만 사용)
+            if game_status_info['is_game_question']:
+                if game_status_info['status'] == 'in_progress':
+                    return self._generate_in_progress_game_answer(question, data, game_status_info)
+                elif game_status_info['status'] == 'finished':
+                    return self._generate_finished_game_answer(question, data, game_status_info)
+                elif game_status_info['status'] == 'not_started':
+                    return self._generate_not_started_game_answer(question, data, game_status_info)
+            
             # 데이터를 컨텍스트로 변환
             context = json.dumps(data, ensure_ascii=False, indent=2)
             
@@ -489,6 +501,337 @@ class RAGTextToSQL:
         except Exception as e:
             print(f"❌ 결과 분석 오류: {e}")
             return "DB_ERROR: 데이터 분석 중 오류가 발생했습니다."
+    
+    def _check_game_status_from_data(self, data: list) -> dict:
+        """데이터에서 경기 상태 확인"""
+        try:
+            if not data or not isinstance(data, list) or len(data) == 0:
+                return {'is_game_question': False, 'status': 'unknown'}
+            
+            # 첫 번째 데이터 확인 (보통 가장 최근 경기)
+            first_game = data[0]
+            
+            # 경기 관련 질문인지 확인 (status_code나 game_id가 있는지)
+            is_game_question = (
+                'status_code' in first_game or 
+                'game_id' in first_game or
+                'game_date' in first_game or
+                'home_team' in first_game or
+                'away_team' in first_game
+            )
+            
+            if not is_game_question:
+                return {'is_game_question': False, 'status': 'unknown'}
+            
+            # 상태 코드 확인
+            status_code = first_game.get('status_code', '')
+            status_info = first_game.get('status_info', '')
+            
+            print(f"🔍 경기 상태 확인: status_code={status_code}, status_info={status_info}")
+            
+            # 상태 분류
+            if status_code == 'RESULT' or status_code == '4' or status_code == '3':
+                # 경기 종료 (9회말, 9회초 등)
+                if '9회' in status_info or status_info == '':
+                    return {'is_game_question': True, 'status': 'finished', 'game_data': first_game}
+                else:
+                    return {'is_game_question': True, 'status': 'finished', 'game_data': first_game}
+            
+            elif status_code == 'LIVE' or status_code == '2':
+                # 경기 진행중
+                return {'is_game_question': True, 'status': 'in_progress', 'game_data': first_game}
+            
+            elif status_code == 'BEFORE' or status_code == '0' or status_code == '1':
+                # 경기 시작 전
+                return {'is_game_question': True, 'status': 'not_started', 'game_data': first_game}
+            
+            else:
+                # 상태 불명
+                return {'is_game_question': True, 'status': 'unknown', 'game_data': first_game}
+                
+        except Exception as e:
+            print(f"❌ 경기 상태 확인 오류: {e}")
+            return {'is_game_question': False, 'status': 'unknown'}
+    
+    def _is_current_game_question(self, question: str) -> bool:
+        """현재 진행중인 경기에 대한 질문인지 판단"""
+        current_keywords = [
+            '지금', '현재', '지금은', '현재는', '지금 몇회', '현재 몇회',
+            '지금 점수', '현재 점수', '지금 상황', '현재 상황',
+            '지금 어떻게', '현재 어떻게', '지금 어때', '현재 어때'
+        ]
+        
+        question_lower = question.lower()
+        return any(keyword in question_lower for keyword in current_keywords)
+    
+    def _generate_in_progress_game_answer(self, question: str, data: list, status_info: dict) -> str:
+        """진행중인 경기에 대한 답변 생성"""
+        try:
+            game_data = status_info.get('game_data', {})
+            question_lower = question.lower()
+            
+            # 기본 경기 정보
+            home_team = game_data.get('home_team_name', game_data.get('home_team', ''))
+            away_team = game_data.get('away_team_name', game_data.get('away_team', ''))
+            stadium = game_data.get('stadium', '')
+            game_date = game_data.get('game_date', '')
+            status_info_text = game_data.get('status_info', '')
+            
+            # API 데이터에서 현재 이닝과 점수 정보 가져오기
+            current_inning = status_info.get('current_inning', status_info_text)
+            current_score = status_info.get('current_score', {})
+            
+            # 진행중인 경기임을 명시
+            answer = f"🔴 현재 진행중인 경기입니다!\n"
+            answer += f"🏟️ {away_team} vs {home_team} ({stadium})\n"
+            
+            # 현재 이닝 정보
+            if current_inning:
+                answer += f"⚾ 현재 상황: {current_inning}\n"
+            elif status_info_text:
+                answer += f"⚾ 현재 상황: {status_info_text}\n"
+            
+            # 현재 점수 정보
+            if current_score:
+                # API에서 받은 점수 정보 처리 (hScore: 홈팀, aScore: 원정팀)
+                home_score = current_score.get('hScore', current_score.get('home', game_data.get('home_team_score', '0')))
+                away_score = current_score.get('aScore', current_score.get('away', game_data.get('away_team_score', '0')))
+                answer += f"📊 현재 점수: {away_team} {away_score} - {home_score} {home_team}\n"
+            else:
+                home_score = game_data.get('home_team_score', '0')
+                away_score = game_data.get('away_team_score', '0')
+                answer += f"📊 현재 점수: {away_team} {away_score} - {home_score} {home_team}\n"
+            
+            # 질문 유형별 답변
+            if any(keyword in question_lower for keyword in ['선발', '투수']):
+                home_starter = game_data.get('home_starter_name', '')
+                away_starter = game_data.get('away_starter_name', '')
+                
+                if home_starter and away_starter:
+                    answer += f"🎯 선발 투수: {away_team} {away_starter} vs {home_team} {home_starter}\n"
+                else:
+                    answer += f"🎯 선발 투수 정보를 확인할 수 없습니다.\n"
+            
+            elif any(keyword in question_lower for keyword in ['몇회', '몇 회', '이닝']):
+                if current_inning:
+                    answer += f"⚾ 현재 {current_inning}입니다.\n"
+                else:
+                    answer += f"⚾ 현재 이닝 정보를 확인할 수 없습니다.\n"
+            
+            elif any(keyword in question_lower for keyword in ['어떻게', '상황', '현황']):
+                answer += f"📈 경기가 현재 진행중이므로 실시간으로 상황이 변할 수 있습니다.\n"
+            
+            return answer
+            
+        except Exception as e:
+            print(f"❌ 진행중 경기 답변 생성 오류: {e}")
+            return "현재 진행중인 경기 정보를 처리하는 중 오류가 발생했습니다."
+    
+    def _generate_finished_game_answer(self, question: str, data: list, status_info: dict) -> str:
+        """종료된 경기에 대한 답변 생성"""
+        try:
+            game_data = status_info.get('game_data', {})
+            
+            # 기본 경기 정보
+            home_team = game_data.get('home_team_name', game_data.get('home_team', ''))
+            away_team = game_data.get('away_team_name', game_data.get('away_team', ''))
+            stadium = game_data.get('stadium', '')
+            game_date = game_data.get('game_date', '')
+            home_score = game_data.get('home_team_score', '0')
+            away_score = game_data.get('away_team_score', '0')
+            winner = game_data.get('winner', '')
+            
+            # 경기 결과 요약
+            if winner == 'HOME':
+                result_text = f"{home_team} {home_score} - {away_score} {away_team}로 승리"
+            elif winner == 'AWAY':
+                result_text = f"{away_team} {away_score} - {home_score} {home_team}로 승리"
+            else:
+                result_text = f"{away_team} {away_score} - {home_score} {home_team}"
+            
+            # 날짜 포맷팅
+            if game_date and len(game_date) == 8:
+                formatted_date = f"{game_date[:4]}년 {game_date[4:6]}월 {game_date[6:8]}일"
+            else:
+                formatted_date = game_date
+            
+            answer = f"📅 {formatted_date} {stadium}에서 열린 경기 결과입니다.\n"
+            answer += f"🏆 {result_text}했습니다.\n"
+            
+            # 질문 유형별 추가 정보
+            question_lower = question.lower()
+            if any(keyword in question_lower for keyword in ['선발', '투수']):
+                home_starter = game_data.get('home_starter_name', '')
+                away_starter = game_data.get('away_starter_name', '')
+                win_pitcher = game_data.get('win_pitcher_name', '')
+                lose_pitcher = game_data.get('lose_pitcher_name', '')
+                
+                if home_starter and away_starter:
+                    answer += f"🎯 선발 투수: {away_team} {away_starter} vs {home_team} {home_starter}\n"
+                
+                if win_pitcher and lose_pitcher:
+                    answer += f"🏅 승리 투수: {win_pitcher}, 패전 투수: {lose_pitcher}\n"
+            
+            return answer
+            
+        except Exception as e:
+            print(f"❌ 종료된 경기 답변 생성 오류: {e}")
+            return "경기 결과 정보를 처리하는 중 오류가 발생했습니다."
+    
+    def _generate_not_started_game_answer(self, question: str, data: list, status_info: dict) -> str:
+        """시작 전 경기에 대한 답변 생성"""
+        try:
+            game_data = status_info.get('game_data', {})
+            
+            # 기본 경기 정보
+            home_team = game_data.get('home_team_name', game_data.get('home_team', ''))
+            away_team = game_data.get('away_team_name', game_data.get('away_team', ''))
+            stadium = game_data.get('stadium', '')
+            game_date = game_data.get('game_date', '')
+            game_time = game_data.get('game_date_time', '')
+            
+            # 날짜 포맷팅
+            if game_date and len(game_date) == 8:
+                formatted_date = f"{game_date[:4]}년 {game_date[4:6]}월 {game_date[6:8]}일"
+            else:
+                formatted_date = game_date
+            
+            # 시간 포맷팅
+            if game_time and len(game_time) >= 16:
+                time_part = game_time[11:16]
+            else:
+                time_part = "시간 미정"
+            
+            answer = f"⏰ 아직 시작하지 않은 경기입니다.\n"
+            answer += f"🏟️ {away_team} vs {home_team} ({stadium})\n"
+            answer += f"📅 {formatted_date} {time_part} 예정\n"
+            
+            # 질문 유형별 답변
+            question_lower = question.lower()
+            if any(keyword in question_lower for keyword in ['선발', '투수']):
+                home_starter = game_data.get('home_starter_name', '')
+                away_starter = game_data.get('away_starter_name', '')
+                
+                if home_starter and away_starter:
+                    answer += f"🎯 예정 선발 투수: {away_team} {away_starter} vs {home_team} {home_starter}\n"
+                else:
+                    answer += f"🎯 선발 투수 정보는 경기 시작 전에 공개됩니다.\n"
+            
+            return answer
+            
+        except Exception as e:
+            print(f"❌ 시작 전 경기 답변 생성 오류: {e}")
+            return "예정된 경기 정보를 처리하는 중 오류가 발생했습니다."
+    
+    async def _check_live_game_status_from_api(self, game_data: dict) -> dict:
+        """API 호출을 통해 실제 경기 상태 확인"""
+        try:
+            game_id = game_data.get('game_id')
+            if not game_id:
+                return {'status': 'unknown', 'game_data': game_data}
+            
+            print(f"🔍 API 호출로 경기 상태 확인: {game_id}")
+            
+            # game_record_service를 통해 실제 API 호출
+            from data.game_record_service import GameRecordService
+            game_record_service = GameRecordService()
+            
+            record_data = await game_record_service.get_game_record(game_id)
+            
+            if not record_data:
+                print(f"❌ API 응답 없음: {game_id}")
+                return {'status': 'unknown', 'game_data': game_data}
+            
+            # API 응답에서 경기 상태 확인
+            game_status = self._parse_api_game_status(record_data)
+            print(f"🔍 API 상태 확인 결과: {game_status}")
+            
+            return {
+                'status': game_status['status'],
+                'game_data': game_data,
+                'api_data': record_data,
+                'current_inning': game_status.get('current_inning', ''),
+                'current_score': game_status.get('current_score', {}),
+                'status_info': game_status.get('status_info', '')
+            }
+            
+        except Exception as e:
+            print(f"❌ API 경기 상태 확인 오류: {e}")
+            return {'status': 'unknown', 'game_data': game_data}
+    
+    def _parse_api_game_status(self, record_data: dict) -> dict:
+        """API 응답에서 경기 상태 파싱"""
+        try:
+            # result.recordData.games 구조에서 찾기
+            if ('result' in record_data and 'recordData' in record_data['result'] and 
+                'games' in record_data['result']['recordData'] and 
+                len(record_data['result']['recordData']['games']) > 0):
+                
+                game_info = record_data['result']['recordData']['games'][0]
+                
+                # 상태 코드 확인
+                status_code = game_info.get('statusCode', '')
+                current_inning = game_info.get('inn', '')
+                score_info = game_info.get('score', {})
+                
+                print(f"🔍 API 상태 정보: statusCode={status_code}, inn={current_inning}")
+                
+                # 상태 분류
+                if str(status_code) == '2':  # 진행중
+                    return {
+                        'status': 'in_progress',
+                        'current_inning': current_inning,
+                        'current_score': score_info,
+                        'status_info': current_inning
+                    }
+                elif str(status_code) in ['3', '4']:  # 종료
+                    return {
+                        'status': 'finished',
+                        'current_inning': current_inning,
+                        'current_score': score_info,
+                        'status_info': current_inning
+                    }
+                elif str(status_code) in ['0', '1']:  # 경기 전
+                    return {
+                        'status': 'not_started',
+                        'current_inning': '',
+                        'current_score': {},
+                        'status_info': '경기 예정'
+                    }
+                else:
+                    return {
+                        'status': 'unknown',
+                        'current_inning': current_inning,
+                        'current_score': score_info,
+                        'status_info': current_inning
+                    }
+            else:
+                # recordData가 null인 경우 (경기 시작 전)
+                if ('result' in record_data and 
+                    'recordData' in record_data['result'] and 
+                    record_data['result']['recordData'] is None):
+                    return {
+                        'status': 'not_started',
+                        'current_inning': '',
+                        'current_score': {},
+                        'status_info': '경기 예정'
+                    }
+                else:
+                    return {
+                        'status': 'unknown',
+                        'current_inning': '',
+                        'current_score': {},
+                        'status_info': '상태 불명'
+                    }
+                    
+        except Exception as e:
+            print(f"❌ API 상태 파싱 오류: {e}")
+            return {
+                'status': 'unknown',
+                'current_inning': '',
+                'current_score': {},
+                'status_info': '파싱 오류'
+            }
     
     def _get_no_data_message(self, question: str) -> str:
         """질문 유형에 따른 적절한 '데이터 없음' 메시지 반환"""
@@ -524,13 +867,39 @@ class RAGTextToSQL:
         else:
             return "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊"
     
-    def process_question(self, question: str) -> str:
+    async def process_question(self, question: str) -> str:
         """질문을 RAG 기반 Text-to-SQL로 처리"""
         try:
             print(f"🔍 RAG 기반 Text-to-SQL 처리 시작: {question}")
             
+            # 현재 진행중인 경기 질문인지 확인
+            if self._is_current_game_question(question):
+                print(f"🔍 현재 진행중인 경기 질문 감지: {question}")
+                import asyncio
+                import threading
+                
+                def run_in_thread():
+                    # 새로운 스레드에서 새로운 이벤트 루프 실행
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(self._handle_current_game_question(question))
+                    finally:
+                        loop.close()
+                
+                try:
+                    # 스레드에서 비동기 함수 실행
+                    result = [None]
+                    thread = threading.Thread(target=lambda: result.__setitem__(0, run_in_thread()))
+                    thread.start()
+                    thread.join()
+                    return result[0] if result[0] else "현재 경기 정보 처리 중 오류가 발생했습니다."
+                except Exception as e:
+                    print(f"❌ 비동기 처리 오류: {e}")
+                    return "현재 경기 정보 처리 중 오류가 발생했습니다."
+            
             # 하루치 경기 일정 질문인지 확인
-            if self._is_daily_schedule_question(question):
+            elif self._is_daily_schedule_question(question):
                 print(f"🔍 하루치 경기 일정 질문 감지: {question}")
                 import asyncio
                 import threading
@@ -746,6 +1115,94 @@ class RAGTextToSQL:
         
         # 일정 키워드가 있고 특정 팀이 언급되지 않은 경우
         return has_schedule_keyword and not has_team_keyword
+    
+    async def _handle_current_game_question(self, question: str) -> str:
+        """현재 진행중인 경기 질문 처리"""
+        try:
+            print(f"🔍 현재 진행중인 경기 질문 처리 시작: {question}")
+            
+            # 질문에서 팀 정보 추출
+            team_info = self._extract_team_from_question(question)
+            print(f"🔍 추출된 팀: {team_info}")
+            
+            # 오늘 날짜로 경기 조회
+            from datetime import datetime
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # 해당 팀의 오늘 경기 조회
+            if team_info:
+                team_code_mapping = {
+                    '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
+                    '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
+                    'NC': 'NC', 'LG': 'LG'
+                }
+                team_code = team_code_mapping.get(team_info, team_info)
+                
+                # 홈팀 또는 원정팀 조건으로 조회
+                home_query = self.supabase.supabase.table("game_schedule").select("*").eq("game_date", today).eq("home_team_code", team_code)
+                home_result = home_query.execute()
+                
+                away_query = self.supabase.supabase.table("game_schedule").select("*").eq("game_date", today).eq("away_team_code", team_code)
+                away_result = away_query.execute()
+                
+                # 결과 합치기
+                games = []
+                if home_result.data:
+                    games.extend(home_result.data)
+                if away_result.data:
+                    games.extend(away_result.data)
+                
+                if not games:
+                    return f"오늘 {team_info} 팀의 경기가 없습니다."
+                
+                # 가장 최근 경기 선택 (시간순으로 정렬)
+                games.sort(key=lambda x: x.get('game_date_time', ''), reverse=True)
+                current_game = games[0]
+            else:
+                # 팀이 지정되지 않은 경우 오늘의 모든 경기 중 진행중인 경기 찾기
+                all_games_query = self.supabase.supabase.table("game_schedule").select("*").eq("game_date", today)
+                all_games_result = all_games_query.execute()
+                
+                if not all_games_result.data:
+                    return "오늘 경기가 없습니다."
+                
+                # 진행중인 경기 찾기 (LIVE 상태)
+                live_games = [game for game in all_games_result.data if game.get('status_code') == 'LIVE']
+                
+                if not live_games:
+                    return "현재 진행중인 경기가 없습니다."
+                
+                current_game = live_games[0]
+            
+            # 경기 상태 확인 및 API 호출
+            game_id = current_game.get('game_id')
+            if game_id:
+                # API를 통해 실제 경기 상태 확인
+                api_status = await self._check_live_game_status_from_api(current_game)
+                
+                if api_status['status'] == 'in_progress':
+                    return self._generate_in_progress_game_answer(question, [current_game], api_status)
+                elif api_status['status'] == 'finished':
+                    return self._generate_finished_game_answer(question, [current_game], api_status)
+                elif api_status['status'] == 'not_started':
+                    return self._generate_not_started_game_answer(question, [current_game], api_status)
+            
+            # API 호출 실패 시 데이터베이스 상태로 처리
+            game_status_info = self._check_game_status_from_data([current_game])
+            
+            if game_status_info['is_game_question']:
+                if game_status_info['status'] == 'in_progress':
+                    return self._generate_in_progress_game_answer(question, [current_game], game_status_info)
+                elif game_status_info['status'] == 'finished':
+                    return self._generate_finished_game_answer(question, [current_game], game_status_info)
+                elif game_status_info['status'] == 'not_started':
+                    return self._generate_not_started_game_answer(question, [current_game], game_status_info)
+            
+            return "현재 경기 정보를 확인할 수 없습니다."
+                
+        except Exception as e:
+            print(f"❌ 현재 경기 질문 처리 오류: {e}")
+            return f"현재 경기 정보 처리 중 오류가 발생했습니다: {str(e)}"
     
     async def _handle_daily_schedule_question(self, question: str) -> str:
         """하루치 경기 일정 처리"""
@@ -979,14 +1436,46 @@ class RAGTextToSQL:
             if not record_data:
                 return f"경기 기록 데이터를 가져올 수 없습니다."
             
-            # 경기 데이터 분석
-            analysis = game_record_service.analyze_game_record(record_data)
+            # API 호출을 통한 실제 경기 상태 확인
+            api_game_status = self._parse_api_game_status(record_data)
             
-            # 자연어 요약 생성
-            summary = game_record_service.generate_game_summary(analysis)
-            
-            print(f"✅ 경기 분석 완료")
-            return summary
+            # 경기 상태에 따른 다른 처리
+            if api_game_status['status'] == 'in_progress':
+                # 진행중인 경기에 대한 답변
+                return self._generate_in_progress_game_answer(question, [game_info], {
+                    'status': 'in_progress',
+                    'game_data': game_info,
+                    'api_data': record_data,
+                    'current_inning': api_game_status.get('current_inning', ''),
+                    'current_score': api_game_status.get('current_score', {}),
+                    'status_info': api_game_status.get('status_info', '')
+                })
+            elif api_game_status['status'] == 'finished':
+                # 종료된 경기에 대한 답변
+                return self._generate_finished_game_answer(question, [game_info], {
+                    'status': 'finished',
+                    'game_data': game_info,
+                    'api_data': record_data,
+                    'current_inning': api_game_status.get('current_inning', ''),
+                    'current_score': api_game_status.get('current_score', {}),
+                    'status_info': api_game_status.get('status_info', '')
+                })
+            elif api_game_status['status'] == 'not_started':
+                # 시작 전 경기에 대한 답변
+                return self._generate_not_started_game_answer(question, [game_info], {
+                    'status': 'not_started',
+                    'game_data': game_info,
+                    'api_data': record_data,
+                    'current_inning': '',
+                    'current_score': {},
+                    'status_info': '경기 예정'
+                })
+            else:
+                # 기존 방식으로 처리 (API 상태 불명인 경우)
+                analysis = game_record_service.analyze_game_record(record_data)
+                summary = game_record_service.generate_game_summary(analysis)
+                print(f"✅ 경기 분석 완료")
+                return summary
             
         except Exception as e:
             print(f"❌ 경기 분석 처리 오류: {e}")

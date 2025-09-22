@@ -72,8 +72,7 @@ class KakaoService:
                     print(f"[BACKGROUND] 백그라운드 챗봇 처리 시작 - 사용자: {user_id}, 질문: {question}")
                     
                     # Text-to-SQL 서비스 호출
-                    loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, self.text_to_sql.process_question, question)
+                    result = await self.text_to_sql.process_question(question)
                     
                     if result:
                         response_text = result
@@ -203,9 +202,8 @@ class KakaoService:
             # 4초 대기 (빠른 응답인지 확인)
             try:
                 # 4초 동안 챗봇 작업이 완료되는지 기다림
-                loop = asyncio.get_event_loop()
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(None, self.text_to_sql.process_question, question),
+                    self.text_to_sql.process_question(question),
                     timeout=3.0
                 )
                 
