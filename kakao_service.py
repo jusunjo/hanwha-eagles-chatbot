@@ -13,7 +13,10 @@ class KakaoService:
     """Service for handling Kakao chatbot requests with Hanwha Eagles data."""
     
     def __init__(self):
+        print("🔄 KakaoService 초기화 시작...")
+        print("🔄 RAGTextToSQL 인스턴스 생성 중... (이 과정에서 텐서플로우 모델 훈련이 진행됩니다)")
         self.text_to_sql = RAGTextToSQL()
+        print("✅ KakaoService 초기화 완료")
     
     async def process_kakao_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """

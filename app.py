@@ -6,13 +6,27 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import json
 import logging
-from kakao_service import kakao_service
+import time
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+print("🚀 FastAPI 애플리케이션 시작 중...")
+start_time = time.time()
+
+print("🔄 [1/3] FastAPI 앱 초기화 중...")
 app = FastAPI(title="Hanwha Eagles Chatbot", version="1.0.0")
+print("✅ FastAPI 앱 초기화 완료")
+
+print("🔄 [2/3] Kakao 서비스 초기화 중...")
+from kakao_service import kakao_service
+print("✅ Kakao 서비스 초기화 완료")
+
+print("🔄 [3/3] 모든 서비스 초기화 완료!")
+total_time = time.time() - start_time
+print(f"⏱️ 총 초기화 시간: {total_time:.2f}초")
+print("🎉 서버가 준비되었습니다!")
 
 @app.get("/")
 async def root():

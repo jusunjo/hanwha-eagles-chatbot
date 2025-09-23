@@ -13,6 +13,7 @@ from langchain.prompts import ChatPromptTemplate
 from data.supabase_client import SupabaseManager
 from rag.schema_manager import SchemaManager
 from data.game_record_service import game_record_service
+from data.game_preview_service import game_preview_service
 import re
 import json
 
@@ -358,61 +359,61 @@ class RAGTextToSQL:
     def _get_game_schedule_data(self, sql: str, question: str = "") -> list:
         """경기 일정 데이터 조회"""
         try:
-            from datetime import datetime, timedelta
+            # RAG 시스템이 생성한 SQL을 직접 실행
+            print(f"🔍 RAG SQL 실행: {sql}")
             
-            # game_schedule 테이블에서 데이터 조회
+            # SQL에서 SELECT 절 추출
+            if "SELECT" in sql.upper():
+                # 간단한 SQL 파싱 (WHERE 절만 추출)
+                where_clause = ""
+                if "WHERE" in sql.upper():
+                    where_start = sql.upper().find("WHERE")
+                    where_clause = sql[where_start:]
+                    # ORDER BY, LIMIT 제거
+                    if "ORDER BY" in where_clause.upper():
+                        where_clause = where_clause[:where_clause.upper().find("ORDER BY")]
+                    if "LIMIT" in where_clause.upper():
+                        where_clause = where_clause[:where_clause.upper().find("LIMIT")]
+                    where_clause = where_clause.strip()
+                
+                # Supabase 쿼리 실행
+                query = self.supabase.supabase.table("game_schedule").select("*")
+                
+                # WHERE 절이 있으면 적용
+                if where_clause:
+                    # 팀명 조건 파싱
+                    if "한화" in where_clause:
+                        # 한화 홈 경기와 원정 경기를 각각 조회
+                        home_games = self.supabase.supabase.table("game_schedule").select("*").eq("home_team_name", "한화").execute()
+                        away_games = self.supabase.supabase.table("game_schedule").select("*").eq("away_team_name", "한화").execute()
+                        
+                        # 날짜 조건 적용
+                        if "game_date::date >= CURRENT_DATE" in where_clause:
+                            from datetime import datetime
+                            today = datetime.now().strftime("%Y-%m-%d")
+                            
+                            # 홈 경기 필터링
+                            home_filtered = [game for game in home_games.data if game.get('game_date', '') >= today]
+                            # 원정 경기 필터링
+                            away_filtered = [game for game in away_games.data if game.get('game_date', '') >= today]
+                            
+                            # 결과 합치기
+                            all_games = home_filtered + away_filtered
+                            # 날짜순 정렬
+                            all_games.sort(key=lambda x: x.get('game_date', ''))
+                            return all_games
+                        else:
+                            # 날짜 조건 없이 모든 경기 반환
+                            all_games = home_games.data + away_games.data
+                            all_games.sort(key=lambda x: x.get('game_date', ''))
+                            return all_games
+                
+                result = query.execute()
+                return result.data if result.data else []
+            
+            # 기본 조회 (SQL이 복잡한 경우)
             result = self.supabase.supabase.table("game_schedule").select("*").execute()
-            
-            if not result.data:
-                return []
-            
-            # 날짜 필터링
-            today = datetime.now()
-            today_str = today.strftime("%Y-%m-%d")
-            
-            # 질문에 따른 날짜 필터링
-            if "오늘" in question or "today" in question.lower():
-                filtered_games = [game for game in result.data if game.get('game_date') == today_str]
-                print(f"📅 오늘({today_str}) 경기 조회: {len(filtered_games)}개")
-            elif "내일" in question or "tomorrow" in question.lower():
-                tomorrow = today + timedelta(days=1)
-                tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-                filtered_games = [game for game in result.data if game.get('game_date') == tomorrow_str]
-                print(f"📅 내일({tomorrow_str}) 경기 조회: {len(filtered_games)}개")
-            else:
-                # 기본적으로 최근 7일간의 경기만 조회
-                week_ago = today - timedelta(days=7)
-                week_ago_str = week_ago.strftime("%Y-%m-%d")
-                filtered_games = [
-                    game for game in result.data 
-                    if game.get('game_date', '') >= week_ago_str and game.get('game_date', '') <= today_str
-                ]
-                print(f"📅 최근 7일간({week_ago_str} ~ {today_str}) 경기 조회: {len(filtered_games)}개")
-            
-            # 특정 팀 관련 질문인지 확인
-            team_mappings = {
-                '한화': 'HH', '두산': 'OB', 'KIA': 'HT', '키움': 'WO',
-                '롯데': 'LT', '삼성': 'SS', 'SSG': 'SK', 'KT': 'KT',
-                'NC': 'NC', 'LG': 'LG'
-            }
-            
-            # 질문에서 팀명 추출
-            mentioned_team = None
-            for team_name, team_code in team_mappings.items():
-                if team_name in question or team_code.lower() in question.lower():
-                    mentioned_team = team_code
-                    break
-            
-            if mentioned_team:
-                # 해당 팀 경기만 필터링
-                team_games = [
-                    game for game in filtered_games 
-                    if game.get('home_team_code') == mentioned_team or game.get('away_team_code') == mentioned_team
-                ]
-                print(f"📅 {mentioned_team} 팀 경기 조회: {len(team_games)}개")
-                return team_games
-            else:
-                return filtered_games
+            return result.data if result.data else []
             
         except Exception as e:
             print(f"❌ 경기 일정 조회 오류: {e}")
@@ -520,6 +521,10 @@ class RAGTextToSQL:
         elif any(keyword in question for keyword in ['순위', '등수', '우승', '포스트시즌', '플레이오프']):
             return "해당 조건의 팀 순위 정보를 찾을 수 없습니다. 다른 조건으로 검색해보세요! 😊"
         
+        # 경기 예측 관련 질문
+        elif any(keyword in question for keyword in ['이길', '질 것', '예상', '승부', '누가', '어떤 팀', '결과', '예측', '이길거같', '질거같', '승리', '패배']):
+            return "경기 예측을 위한 데이터가 부족합니다. 팀명을 포함해서 다시 질문해주세요! 😊"
+        
         # 일반적인 경우
         else:
             return "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊"
@@ -528,10 +533,15 @@ class RAGTextToSQL:
         """질문을 RAG 기반 Text-to-SQL로 처리"""
         try:
             print(f"🔍 RAG 기반 Text-to-SQL 처리 시작: {question}")
+            print(f"📋 질문 처리 플로우 분석 시작")
             
             # 하루치 경기 일정 질문인지 확인
-            if self._is_daily_schedule_question(question):
+            is_daily_schedule = self._is_daily_schedule_question(question)
+            print(f"🔍 하루치 경기 일정 질문 여부: {is_daily_schedule}")
+            
+            if is_daily_schedule:
                 print(f"🔍 하루치 경기 일정 질문 감지: {question}")
+                print(f"📋 플로우: _handle_daily_schedule_question() 실행")
                 import asyncio
                 import threading
                 
@@ -558,6 +568,7 @@ class RAGTextToSQL:
             # 하루치 경기 결과 질문인지 확인
             elif self._is_daily_games_question(question):
                 print(f"🔍 하루치 경기 결과 질문 감지: {question}")
+                print(f"📋 플로우: _handle_daily_games_analysis() 실행")
                 import asyncio
                 import threading
                 
@@ -581,9 +592,22 @@ class RAGTextToSQL:
                     print(f"❌ 비동기 처리 오류: {e}")
                     return "하루치 경기 분석 처리 중 오류가 발생했습니다."
             
+            # 미래 경기 정보 질문인지 확인
+            elif self._is_future_game_info_question(question):
+                print(f"🔍 미래 경기 정보 질문 감지: {question}")
+                print(f"📋 플로우: _handle_future_game_info() 실행")
+                return self._handle_future_game_info(question)
+            
+            # 경기 예측 질문인지 확인
+            elif self._is_game_prediction_question(question):
+                print(f"🔍 경기 예측 질문 감지: {question}")
+                print(f"📋 플로우: _analyze_game_prediction() 실행")
+                return self._analyze_game_prediction([], question)
+            
             # 경기 분석 질문인지 확인
             elif self._is_game_analysis_question(question):
                 print(f"🔍 경기 분석 질문 감지: {question}")
+                print(f"📋 플로우: _handle_game_analysis_question() 실행")
                 import asyncio
                 import threading
                 
@@ -607,9 +631,13 @@ class RAGTextToSQL:
                     print(f"❌ 비동기 처리 오류: {e}")
                     return "경기 분석 처리 중 오류가 발생했습니다."
             
+            # RAG 시스템으로 처리
+            print(f"📋 플로우: RAG 시스템 (generate_sql -> execute_sql -> analyze_results) 실행")
+            
             # SQL 생성
             sql = self.generate_sql(question)
             if not sql:
+                print(f"❌ SQL 생성 실패")
                 return "SQL 생성에 실패했습니다."
             
             # SQL 실행
@@ -625,9 +653,61 @@ class RAGTextToSQL:
             print(f"❌ RAG 기반 Text-to-SQL 처리 오류: {e}")
             return f"처리 중 오류가 발생했습니다: {str(e)}"
     
+    def _is_future_game_info_question(self, question: str) -> bool:
+        """미래 경기 정보 질문인지 판단"""
+        question_lower = question.lower()
+        
+        # 미래 경기 정보 관련 키워드들
+        future_info_keywords = [
+            '선발투수', '선발', '투수', '라인업', '출전', '선수', '누구', '어디서', '언제', '몇시', 
+            '경기장', '상대팀', '내일', '모레', '다음', '이번 주', '다음 주', '앞으로', '예정', 
+            '경기 정보', '경기 상세', '경기 세부사항', '경기 시간', '경기 장소', '어느 팀', '어떤 팀'
+        ]
+        
+        # 예측 질문과 구분하기 위한 제외 키워드
+        prediction_keywords = ['이길', '질 것', '예상', '승부', '결과', '예측', '이길거같', '질거같', '승리', '패배']
+        
+        # 예측 키워드가 있으면 미래 경기 정보가 아님
+        if any(kw in question_lower for kw in prediction_keywords):
+            return False
+        
+        # 미래 경기 정보 키워드 매칭 확인
+        matched_keywords = [kw for kw in future_info_keywords if kw in question_lower]
+        if matched_keywords:
+            print(f"  🔍 미래 경기 정보 키워드 매칭: {matched_keywords}")
+        else:
+            print(f"  🔍 미래 경기 정보 키워드 매칭 없음")
+        
+        return len(matched_keywords) > 0
+    
+    def _is_game_prediction_question(self, question: str) -> bool:
+        """경기 예측 질문인지 판단"""
+        question_lower = question.lower()
+        
+        # 경기 예측 관련 키워드들
+        prediction_keywords = [
+            '이길', '질 것', '예상', '승부', '누가', '어떤 팀', '결과', '예측', '이길거같', '질거같', 
+            '승리', '패배', '누가 이길', '어떤 팀이', '승부 예상', '경기 예상', '이길까', '질까', 
+            '승부는', '결과는', '이길 것 같', '질 것 같', '승부 예상', '경기 결과 예상', 
+            '누가 이길까', '어떤 팀이 이길까', '경기 승부 예상', '경기 결과 예측'
+        ]
+        
+        # 키워드 매칭 확인
+        matched_keywords = [kw for kw in prediction_keywords if kw in question_lower]
+        if matched_keywords:
+            print(f"  🔍 경기 예측 키워드 매칭: {matched_keywords}")
+        else:
+            print(f"  🔍 경기 예측 키워드 매칭 없음")
+        
+        return len(matched_keywords) > 0
+    
     def _is_game_analysis_question(self, question: str) -> bool:
         """경기 분석 질문인지 판단 (RAG 기반)"""
         try:
+            # 먼저 경기 예측 질문인지 확인 (예측 질문은 분석 질문에서 제외)
+            if self._is_game_prediction_question(question):
+                return False
+            
             # 스키마 매니저를 통해 관련 정보 검색
             relevant_schema = self.schema_manager.get_relevant_schema(question, top_k=3)
             
@@ -729,10 +809,22 @@ class RAGTextToSQL:
         """하루치 경기 일정을 요청하는 질문인지 판단"""
         question_lower = question.lower()
         
+        # "다음 경기" 질문은 제외 (RAG 시스템에서 처리)
+        if '다음 경기' in question_lower:
+            print(f"  🔍 '다음 경기' 키워드 감지 - RAG 시스템으로 전달")
+            return False
+        
         # 경기 일정 관련 키워드들
         schedule_keywords = [
-            '경기 일정', '일정', '스케줄', '예정', '앞으로', '다음'
+            '경기 일정', '일정', '스케줄', '예정', '앞으로'
         ]
+        
+        # 키워드 매칭 확인
+        matched_keywords = [kw for kw in schedule_keywords if kw in question_lower]
+        if matched_keywords:
+            print(f"  🔍 하루치 경기 일정 키워드 매칭: {matched_keywords}")
+        else:
+            print(f"  🔍 하루치 경기 일정 키워드 매칭 없음")
         
         # 특정 팀이 언급되지 않은 경우
         team_keywords = [
@@ -1392,6 +1484,733 @@ class RAGTextToSQL:
         except Exception as e:
             print(f"❌ 최근 경기 조회 오류: {e}")
             return None
+    
+    def _analyze_game_prediction(self, data: list, question: str) -> str:
+        """경기 예측 질문에 대한 상대전적 기반 분석"""
+        try:
+            print(f"🔍 경기 예측 분석 시작: {question}")
+            
+            # 질문에서 팀명 추출
+            team_names = self._extract_team_names_from_question(question)
+            
+            # 팀명이 명시되지 않은 경우, 미래 경기 확인
+            if not team_names:
+                print(f"🔍 팀명이 명시되지 않음 - 미래 경기 조회")
+                future_games = self._get_future_games(question)
+                if not future_games:
+                    return "해당 날짜에 경기가 없습니다. 다른 날짜의 경기를 확인해보세요! 😊"
+                
+                # 미래 경기들에 대한 예측 답변 생성
+                return self._generate_future_games_prediction(future_games, question)
+            
+            # game_schedule에서 해당 팀의 다음 경기 조회
+            next_game = self._get_next_game_for_teams(team_names)
+            if not next_game:
+                return f"{', '.join(team_names)}의 다음 경기 일정을 찾을 수 없습니다."
+            
+            # 상대팀 정보 추출
+            home_team = next_game.get('home_team_name', '')
+            away_team = next_game.get('away_team_name', '')
+            game_date = next_game.get('game_date', '')
+            stadium = next_game.get('stadium', '')
+            
+            # 상대전적 분석
+            prediction_analysis = self._analyze_head_to_head_stats(home_team, away_team)
+            
+            # 팀별 최근 성적 분석
+            home_team_stats = self._get_team_recent_stats(home_team)
+            away_team_stats = self._get_team_recent_stats(away_team)
+            
+            # 예측 답변 생성
+            prediction = self._generate_prediction_response(
+                home_team, away_team, game_date, stadium, 
+                prediction_analysis, home_team_stats, away_team_stats
+            )
+            
+            return prediction
+            
+        except Exception as e:
+            print(f"❌ 경기 예측 분석 오류: {e}")
+            return f"경기 예측 분석 중 오류가 발생했습니다: {str(e)}"
+    
+    def _get_future_games(self, question: str) -> list:
+        """미래 경기 조회 (날짜 추출 기반)"""
+        try:
+            from datetime import datetime, timedelta
+            import re
+            
+            # 질문에서 날짜 정보 추출
+            target_date = self._extract_target_date(question)
+            
+            if not target_date:
+                # 날짜가 명시되지 않은 경우, 오늘부터 앞으로 7일간의 경기 조회
+                today = datetime.now().strftime("%Y-%m-%d")
+                future_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                print(f"🔍 미래 경기 조회: {today} ~ {future_date}")
+                
+                # Supabase에서 미래 경기 조회
+                result = self.supabase.supabase.table("game_schedule").select("*").gte("game_date", today).lte("game_date", future_date).order("game_date").execute()
+            else:
+                print(f"🔍 특정 날짜 경기 조회: {target_date}")
+                
+                # Supabase에서 특정 날짜 경기 조회
+                result = self.supabase.supabase.table("game_schedule").select("*").eq("game_date", target_date).execute()
+            
+            if result.data:
+                print(f"✅ 경기 {len(result.data)}개 발견")
+                return result.data
+            else:
+                print(f"❌ 경기 없음")
+                return []
+                
+        except Exception as e:
+            print(f"❌ 미래 경기 조회 오류: {e}")
+            return []
+    
+    def _extract_target_date(self, question: str) -> str:
+        """질문에서 목표 날짜 추출"""
+        try:
+            from datetime import datetime, timedelta
+            import re
+            
+            question_lower = question.lower()
+            today = datetime.now()
+            
+            # 상대적 날짜 표현 처리
+            if "내일" in question_lower or "tomorrow" in question_lower:
+                return (today + timedelta(days=1)).strftime("%Y-%m-%d")
+            elif "모레" in question_lower or "day after tomorrow" in question_lower:
+                return (today + timedelta(days=2)).strftime("%Y-%m-%d")
+            elif "글피" in question_lower:
+                return (today + timedelta(days=3)).strftime("%Y-%m-%d")
+            elif "다음 주" in question_lower or "next week" in question_lower:
+                return (today + timedelta(days=7)).strftime("%Y-%m-%d")
+            elif "이번 주" in question_lower or "this week" in question_lower:
+                # 이번 주 남은 날들
+                return None  # 특정 날짜가 아니므로 None 반환
+            elif "앞으로" in question_lower or "앞으로 남은" in question_lower or "upcoming" in question_lower:
+                return None  # 앞으로 남은 모든 경기
+            elif "오늘" in question_lower or "today" in question_lower:
+                return today.strftime("%Y-%m-%d")
+            
+            # 구체적인 날짜 패턴 찾기 (YYYY-MM-DD, MM/DD, MM월 DD일 등)
+            date_patterns = [
+                r'(\d{4})-(\d{1,2})-(\d{1,2})',  # 2025-09-25
+                r'(\d{1,2})/(\d{1,2})',  # 9/25
+                r'(\d{1,2})월\s*(\d{1,2})일',  # 9월 25일
+                r'(\d{1,2})일',  # 25일 (이번 달)
+            ]
+            
+            for pattern in date_patterns:
+                match = re.search(pattern, question)
+                if match:
+                    if pattern == r'(\d{4})-(\d{1,2})-(\d{1,2})':
+                        year, month, day = match.groups()
+                        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                    elif pattern == r'(\d{1,2})/(\d{1,2})':
+                        month, day = match.groups()
+                        return f"{today.year}-{month.zfill(2)}-{day.zfill(2)}"
+                    elif pattern == r'(\d{1,2})월\s*(\d{1,2})일':
+                        month, day = match.groups()
+                        return f"{today.year}-{month.zfill(2)}-{day.zfill(2)}"
+                    elif pattern == r'(\d{1,2})일':
+                        day = match.group(1)
+                        return f"{today.year}-{today.month:02d}-{day.zfill(2)}"
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ 날짜 추출 오류: {e}")
+            return None
+    
+    def _generate_future_games_prediction(self, games: list, question: str) -> str:
+        """미래 경기들에 대한 예측 답변 생성"""
+        try:
+            if not games:
+                return "해당 날짜에 경기가 없습니다."
+            
+            # 질문에서 날짜 정보 추출하여 제목 생성
+            date_title = self._get_date_title(question, games)
+            
+            predictions = []
+            for game in games:
+                home_team = game.get('home_team_name', '')
+                away_team = game.get('away_team_name', '')
+                game_date = game.get('game_date', '')
+                stadium = game.get('stadium', '')
+                game_id = game.get('game_id', '')
+                
+                # Game Preview API로 상세 정보 조회
+                preview_info = self._get_game_preview_info(game_id)
+                
+                if preview_info:
+                    # 상세한 미리보기 정보로 예측 생성
+                    game_prediction = self._generate_detailed_prediction_response(
+                        home_team, away_team, game_date, stadium, preview_info
+                    )
+                else:
+                    # 기본 상대전적 분석 (폴백)
+                    prediction_analysis = self._analyze_head_to_head_stats(home_team, away_team)
+                    home_team_stats = self._get_team_recent_stats(home_team)
+                    away_team_stats = self._get_team_recent_stats(away_team)
+                    
+                    game_prediction = self._generate_prediction_response(
+                        home_team, away_team, game_date, stadium, 
+                        prediction_analysis, home_team_stats, away_team_stats
+                    )
+                
+                predictions.append(f"🏟️ {home_team} vs {away_team}\n{game_prediction}")
+            
+            # 전체 답변 구성
+            if len(games) == 1:
+                return f"📅 {date_title}\n\n{predictions[0]}"
+            else:
+                return f"📅 {date_title} ({len(games)}경기)\n\n" + "\n\n".join(predictions)
+                
+        except Exception as e:
+            print(f"❌ 미래 경기 예측 생성 오류: {e}")
+            return f"경기 예측 생성 중 오류가 발생했습니다: {str(e)}"
+    
+    def _get_date_title(self, question: str, games: list) -> str:
+        """질문과 경기 데이터를 바탕으로 제목 생성"""
+        try:
+            question_lower = question.lower()
+            
+            # 상대적 날짜 표현 처리
+            if "내일" in question_lower:
+                return "내일 경기 예측"
+            elif "모레" in question_lower:
+                return "모레 경기 예측"
+            elif "글피" in question_lower:
+                return "글피 경기 예측"
+            elif "다음 주" in question_lower:
+                return "다음 주 경기 예측"
+            elif "이번 주" in question_lower:
+                return "이번 주 경기 예측"
+            elif "앞으로" in question_lower or "앞으로 남은" in question_lower:
+                return "앞으로 남은 경기 예측"
+            elif "오늘" in question_lower:
+                return "오늘 경기 예측"
+            
+            # 구체적인 날짜가 있는 경우
+            if games:
+                first_game_date = games[0].get('game_date', '')
+                if first_game_date:
+                    from datetime import datetime
+                    try:
+                        date_obj = datetime.strptime(first_game_date, '%Y-%m-%d')
+                        formatted_date = date_obj.strftime('%m월 %d일')
+                        return f"{formatted_date} 경기 예측"
+                    except:
+                        pass
+            
+            # 기본값
+            return "경기 예측"
+            
+        except Exception as e:
+            print(f"❌ 날짜 제목 생성 오류: {e}")
+            return "경기 예측"
+    
+    def _get_game_preview_info(self, game_id: str) -> dict:
+        """Game Preview API로 경기 상세 정보 조회"""
+        try:
+            if not game_id:
+                return None
+            
+            print(f"🔍 Game Preview API 호출: {game_id}")
+            
+            # 동기적으로 API 호출 (httpx를 동기 모드로 사용)
+            import httpx
+            
+            url = f"https://api-gw.sports.naver.com/schedule/games/{game_id}/preview"
+            with httpx.Client() as client:
+                response = client.get(url)
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data.get("code") == 200 and data.get("success"):
+                    preview_data = data.get("result", {}).get("previewData")
+                    if preview_data:
+                        print(f"✅ Game Preview 데이터 수신 성공: {game_id}")
+                        return game_preview_service.analyze_game_preview(preview_data)
+                
+                print(f"❌ Game Preview API 실패: {game_id}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Game Preview API 오류: {e}")
+            return None
+    
+    def _generate_detailed_prediction_response(self, home_team: str, away_team: str, 
+                                            game_date: str, stadium: str, preview_info: dict) -> str:
+        """Game Preview 정보를 활용한 상세 예측 답변 생성"""
+        try:
+            game_info = preview_info.get("game_info", {})
+            team_standings = preview_info.get("team_standings", {})
+            starters = preview_info.get("starters", {})
+            key_players = preview_info.get("key_players", {})
+            season_h2h = preview_info.get("season_head_to_head", {})
+            
+            # 기본 경기 정보
+            response = f"📅 {game_date} {stadium}에서 열리는 {home_team} vs {away_team} 경기 예측\n\n"
+            
+            # 팀 순위 및 성적
+            home_standings = team_standings.get("home", {})
+            away_standings = team_standings.get("away", {})
+            
+            response += f"🏆 팀 순위 및 성적:\n"
+            response += f"• {home_team}: {home_standings.get('rank', 'N/A')}위 (승률 {home_standings.get('wra', 'N/A')})\n"
+            response += f"• {away_team}: {away_standings.get('rank', 'N/A')}위 (승률 {away_standings.get('wra', 'N/A')})\n\n"
+            
+            # 선발투수 정보
+            home_starter = starters.get("home", {})
+            away_starter = starters.get("away", {})
+            
+            response += f"⚾ 선발투수:\n"
+            response += f"• {home_team} - {home_starter.get('name', 'N/A')} (ERA {home_starter.get('era', 'N/A')})\n"
+            response += f"• {away_team} - {away_starter.get('name', 'N/A')} (ERA {away_starter.get('era', 'N/A')})\n\n"
+            
+            # 주요 선수 정보
+            home_key_player = key_players.get("home", {})
+            away_key_player = key_players.get("away", {})
+            
+            response += f"🔥 주요 선수:\n"
+            response += f"• {home_team} - {home_key_player.get('name', 'N/A')} (타율 {home_key_player.get('hra', 'N/A')})\n"
+            response += f"• {away_team} - {away_key_player.get('name', 'N/A')} (타율 {away_key_player.get('hra', 'N/A')})\n\n"
+            
+            # 시즌 상대전적
+            hw = season_h2h.get("home_wins", 0)
+            aw = season_h2h.get("away_wins", 0)
+            
+            response += f"📊 시즌 상대전적:\n"
+            response += f"• {home_team} {hw}승 {aw}패 {away_team}\n\n"
+            
+            # 예측 분석
+            response += f"🎯 경기 예상:\n"
+            
+            # 순위 비교
+            home_rank = home_standings.get('rank', 999)
+            away_rank = away_standings.get('rank', 999)
+            
+            if home_rank < away_rank:
+                response += f"• {home_team}이 순위상 우세 ({home_rank}위 vs {away_rank}위)\n"
+            elif away_rank < home_rank:
+                response += f"• {away_team}이 순위상 우세 ({away_rank}위 vs {home_rank}위)\n"
+            else:
+                response += f"• 양팀 순위가 비슷함 ({home_rank}위 vs {away_rank}위)\n"
+            
+            # 홈구장 우세
+            response += f"• {home_team}의 홈구장 우세\n"
+            
+            # 선발투수 비교
+            home_era = float(home_starter.get('era', 999))
+            away_era = float(away_starter.get('era', 999))
+            
+            if home_era < away_era:
+                response += f"• {home_team} 선발투수가 상대적으로 우수 (ERA {home_era} vs {away_era})\n"
+            elif away_era < home_era:
+                response += f"• {away_team} 선발투수가 상대적으로 우수 (ERA {away_era} vs {home_era})\n"
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ 상세 예측 답변 생성 오류: {e}")
+            return f"경기 예측 분석 중 오류가 발생했습니다: {str(e)}"
+    
+    def _handle_future_game_info(self, question: str) -> str:
+        """미래 경기 정보 질문 처리"""
+        try:
+            print(f"🔍 미래 경기 정보 처리 시작: {question}")
+            
+            # 질문에서 팀명 추출
+            team_names = self._extract_team_names_from_question(question)
+            
+            # 질문에서 날짜 추출
+            target_date = self._extract_target_date(question)
+            
+            # 미래 경기 조회
+            if team_names:
+                # 특정 팀의 경기 조회
+                games = self._get_team_future_games(team_names, target_date)
+            else:
+                # 모든 미래 경기 조회
+                games = self._get_future_games(question)
+            
+            if not games:
+                return "해당 조건에 맞는 경기를 찾을 수 없습니다."
+            
+            # 질문 유형에 따른 답변 생성
+            if any(keyword in question.lower() for keyword in ['선발투수', '선발', '투수']):
+                return self._generate_pitcher_info_response(games, question)
+            elif any(keyword in question.lower() for keyword in ['라인업', '출전', '선수']):
+                return self._generate_lineup_info_response(games, question)
+            elif any(keyword in question.lower() for keyword in ['어디서', '경기장', '언제', '몇시', '시간']):
+                return self._generate_venue_time_info_response(games, question)
+            else:
+                return self._generate_general_game_info_response(games, question)
+                
+        except Exception as e:
+            print(f"❌ 미래 경기 정보 처리 오류: {e}")
+            return f"미래 경기 정보 처리 중 오류가 발생했습니다: {str(e)}"
+    
+    def _get_team_future_games(self, team_names: list, target_date: str = None) -> list:
+        """특정 팀의 미래 경기 조회"""
+        try:
+            from datetime import datetime, timedelta
+            
+            if not target_date:
+                today = datetime.now().strftime("%Y-%m-%d")
+                future_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+            else:
+                today = target_date
+                future_date = target_date
+            
+            games = []
+            for team in team_names:
+                # 홈 경기 조회
+                home_games = self.supabase.supabase.table("game_schedule").select("*").eq("home_team_name", team).gte("game_date", today).lte("game_date", future_date).execute()
+                # 원정 경기 조회
+                away_games = self.supabase.supabase.table("game_schedule").select("*").eq("away_team_name", team).gte("game_date", today).lte("game_date", future_date).execute()
+                
+                if home_games.data:
+                    games.extend(home_games.data)
+                if away_games.data:
+                    games.extend(away_games.data)
+            
+            # 날짜순 정렬
+            games.sort(key=lambda x: x.get('game_date', ''))
+            return games
+            
+        except Exception as e:
+            print(f"❌ 팀별 미래 경기 조회 오류: {e}")
+            return []
+    
+    def _generate_pitcher_info_response(self, games: list, question: str) -> str:
+        """선발투수 정보 답변 생성"""
+        try:
+            if not games:
+                return "해당 조건에 맞는 경기를 찾을 수 없습니다."
+            
+            responses = []
+            for game in games:
+                home_team = game.get('home_team_name', '')
+                away_team = game.get('away_team_name', '')
+                game_date = game.get('game_date', '')
+                stadium = game.get('stadium', '')
+                game_id = game.get('game_id', '')
+                
+                # Game Preview API로 선발투수 정보 조회
+                preview_info = self._get_game_preview_info(game_id)
+                
+                if preview_info and preview_info.get('starters'):
+                    starters = preview_info['starters']
+                    home_starter = starters.get('home', {})
+                    away_starter = starters.get('away', {})
+                    
+                    response = f"⚾ {game_date} {stadium} - {home_team} vs {away_team}\n"
+                    response += f"• {home_team} 선발: {home_starter.get('name', '미정')} (등번호 {home_starter.get('backnum', 'N/A')})\n"
+                    response += f"• {away_team} 선발: {away_starter.get('name', '미정')} (등번호 {away_starter.get('backnum', 'N/A')})\n"
+                    
+                    if home_starter.get('era') and home_starter.get('era') != '0.00':
+                        response += f"  - {home_starter.get('name', '')} 시즌 성적: {home_starter.get('w', 0)}승 {home_starter.get('l', 0)}패, ERA {home_starter.get('era', 'N/A')}\n"
+                    if away_starter.get('era') and away_starter.get('era') != '0.00':
+                        response += f"  - {away_starter.get('name', '')} 시즌 성적: {away_starter.get('w', 0)}승 {away_starter.get('l', 0)}패, ERA {away_starter.get('era', 'N/A')}\n"
+                else:
+                    response = f"⚾ {game_date} {stadium} - {home_team} vs {away_team}\n"
+                    response += "• 선발투수 정보를 가져올 수 없습니다.\n"
+                
+                responses.append(response)
+            
+            return "\n".join(responses)
+            
+        except Exception as e:
+            print(f"❌ 선발투수 정보 답변 생성 오류: {e}")
+            return f"선발투수 정보 조회 중 오류가 발생했습니다: {str(e)}"
+    
+    def _generate_lineup_info_response(self, games: list, question: str) -> str:
+        """라인업 정보 답변 생성"""
+        try:
+            if not games:
+                return "해당 조건에 맞는 경기를 찾을 수 없습니다."
+            
+            responses = []
+            for game in games:
+                home_team = game.get('home_team_name', '')
+                away_team = game.get('away_team_name', '')
+                game_date = game.get('game_date', '')
+                stadium = game.get('stadium', '')
+                game_id = game.get('game_id', '')
+                
+                # Game Preview API로 라인업 정보 조회
+                preview_info = self._get_game_preview_info(game_id)
+                
+                if preview_info and preview_info.get('lineups'):
+                    lineups = preview_info['lineups']
+                    home_lineup = lineups.get('home', [])
+                    away_lineup = lineups.get('away', [])
+                    
+                    response = f"📋 {game_date} {stadium} - {home_team} vs {away_team}\n"
+                    
+                    if home_lineup:
+                        response += f"• {home_team} 라인업:\n"
+                        for player in home_lineup[:9]:  # 선발 9명만
+                            position = player.get('positionName', 'N/A')
+                            name = player.get('playerName', 'N/A')
+                            backnum = player.get('backnum', 'N/A')
+                            response += f"  {position}: {name} ({backnum}번)\n"
+                    
+                    if away_lineup:
+                        response += f"• {away_team} 라인업:\n"
+                        for player in away_lineup[:9]:  # 선발 9명만
+                            position = player.get('positionName', 'N/A')
+                            name = player.get('playerName', 'N/A')
+                            backnum = player.get('backnum', 'N/A')
+                            response += f"  {position}: {name} ({backnum}번)\n"
+                else:
+                    response = f"📋 {game_date} {stadium} - {home_team} vs {away_team}\n"
+                    response += "• 라인업 정보를 가져올 수 없습니다.\n"
+                
+                responses.append(response)
+            
+            return "\n".join(responses)
+            
+        except Exception as e:
+            print(f"❌ 라인업 정보 답변 생성 오류: {e}")
+            return f"라인업 정보 조회 중 오류가 발생했습니다: {str(e)}"
+    
+    def _generate_venue_time_info_response(self, games: list, question: str) -> str:
+        """경기장/시간 정보 답변 생성"""
+        try:
+            if not games:
+                return "해당 조건에 맞는 경기를 찾을 수 없습니다."
+            
+            responses = []
+            for game in games:
+                home_team = game.get('home_team_name', '')
+                away_team = game.get('away_team_name', '')
+                game_date = game.get('game_date', '')
+                stadium = game.get('stadium', '')
+                game_time = game.get('game_time', '18:30')
+                
+                response = f"🏟️ {game_date} - {home_team} vs {away_team}\n"
+                response += f"• 경기장: {stadium}\n"
+                response += f"• 경기시간: {game_time}\n"
+                
+                responses.append(response)
+            
+            return "\n".join(responses)
+            
+        except Exception as e:
+            print(f"❌ 경기장/시간 정보 답변 생성 오류: {e}")
+            return f"경기장/시간 정보 조회 중 오류가 발생했습니다: {str(e)}"
+    
+    def _generate_general_game_info_response(self, games: list, question: str) -> str:
+        """일반적인 경기 정보 답변 생성"""
+        try:
+            if not games:
+                return "해당 조건에 맞는 경기를 찾을 수 없습니다."
+            
+            responses = []
+            for game in games:
+                home_team = game.get('home_team_name', '')
+                away_team = game.get('away_team_name', '')
+                game_date = game.get('game_date', '')
+                stadium = game.get('stadium', '')
+                game_time = game.get('game_time', '18:30')
+                game_id = game.get('game_id', '')
+                
+                response = f"📅 {game_date} - {home_team} vs {away_team}\n"
+                response += f"• 경기장: {stadium}\n"
+                response += f"• 경기시간: {game_time}\n"
+                
+                # Game Preview API로 추가 정보 조회
+                preview_info = self._get_game_preview_info(game_id)
+                if preview_info and preview_info.get('starters'):
+                    starters = preview_info['starters']
+                    home_starter = starters.get('home', {})
+                    away_starter = starters.get('away', {})
+                    
+                    if home_starter.get('name'):
+                        response += f"• {home_team} 선발: {home_starter.get('name')}\n"
+                    if away_starter.get('name'):
+                        response += f"• {away_team} 선발: {away_starter.get('name')}\n"
+                
+                responses.append(response)
+            
+            return "\n".join(responses)
+            
+        except Exception as e:
+            print(f"❌ 일반 경기 정보 답변 생성 오류: {e}")
+            return f"경기 정보 조회 중 오류가 발생했습니다: {str(e)}"
+    
+    def _extract_team_names_from_question(self, question: str) -> list:
+        """질문에서 팀명 추출"""
+        team_names = []
+        team_keywords = ['한화', '두산', 'KIA', '키움', '롯데', '삼성', 'SSG', 'KT', 'NC', 'LG']
+        
+        for team in team_keywords:
+            if team in question:
+                team_names.append(team)
+        
+        return team_names
+    
+    def _get_next_game_for_teams(self, team_names: list) -> dict:
+        """해당 팀들의 다음 경기 조회"""
+        try:
+            from datetime import datetime
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            for team in team_names:
+                # 홈팀으로 참여하는 경기
+                home_query = self.supabase.supabase.table("game_schedule").select("*")
+                home_query = home_query.eq("home_team_name", team)
+                home_query = home_query.gte("game_date", today)
+                home_query = home_query.order("game_date").limit(1)
+                home_result = home_query.execute()
+                
+                if home_result.data:
+                    return home_result.data[0]
+                
+                # 원정팀으로 참여하는 경기
+                away_query = self.supabase.supabase.table("game_schedule").select("*")
+                away_query = away_query.eq("away_team_name", team)
+                away_query = away_query.gte("game_date", today)
+                away_query = away_query.order("game_date").limit(1)
+                away_result = away_query.execute()
+                
+                if away_result.data:
+                    return away_result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ 다음 경기 조회 오류: {e}")
+            return None
+    
+    def _analyze_head_to_head_stats(self, home_team: str, away_team: str) -> dict:
+        """상대전적 분석"""
+        try:
+            # game_result 테이블에서 두 팀의 현재 성적 조회
+            home_stats = self.supabase.supabase.table("game_result").select("*").eq("team_name", home_team).execute()
+            away_stats = self.supabase.supabase.table("game_result").select("*").eq("team_name", away_team).execute()
+            
+            if not home_stats.data or not away_stats.data:
+                return {"error": "팀 통계 데이터를 찾을 수 없습니다."}
+            
+            home_data = home_stats.data[0]
+            away_data = away_stats.data[0]
+            
+            # 상대전적 분석 결과
+            analysis = {
+                "home_team": {
+                    "name": home_team,
+                    "ranking": home_data.get("ranking", 0),
+                    "wra": home_data.get("wra", 0.0),
+                    "last_five": home_data.get("last_five_games", ""),
+                    "offense_ops": home_data.get("offense_ops", 0.0),
+                    "defense_era": home_data.get("defense_era", 0.0)
+                },
+                "away_team": {
+                    "name": away_team,
+                    "ranking": away_data.get("ranking", 0),
+                    "wra": away_data.get("wra", 0.0),
+                    "last_five": away_data.get("last_five_games", ""),
+                    "offense_ops": away_data.get("offense_ops", 0.0),
+                    "defense_era": away_data.get("defense_era", 0.0)
+                }
+            }
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"❌ 상대전적 분석 오류: {e}")
+            return {"error": f"상대전적 분석 중 오류: {str(e)}"}
+    
+    def _get_team_recent_stats(self, team_name: str) -> dict:
+        """팀의 최근 성적 조회"""
+        try:
+            result = self.supabase.supabase.table("game_result").select("*").eq("team_name", team_name).execute()
+            
+            if result.data:
+                return result.data[0]
+            return {}
+            
+        except Exception as e:
+            print(f"❌ 팀 성적 조회 오류: {e}")
+            return {}
+    
+    def _generate_prediction_response(self, home_team: str, away_team: str, game_date: str, 
+                                    stadium: str, prediction_analysis: dict, 
+                                    home_team_stats: dict, away_team_stats: dict) -> str:
+        """예측 답변 생성"""
+        try:
+            if "error" in prediction_analysis:
+                return f"📅 {game_date} {stadium}에서 열리는 {home_team} vs {away_team} 경기\n\n{prediction_analysis['error']}"
+            
+            home_data = prediction_analysis["home_team"]
+            away_data = prediction_analysis["away_team"]
+            
+            # 예측 로직 (간단한 비교)
+            home_advantage = 0
+            if home_data["ranking"] < away_data["ranking"]:  # 순위가 높으면 (숫자가 작으면)
+                home_advantage += 1
+            if home_data["wra"] > away_data["wra"]:  # 승률이 높으면
+                home_advantage += 1
+            if home_data["offense_ops"] > away_data["offense_ops"]:  # 공격력이 좋으면
+                home_advantage += 1
+            if home_data["defense_era"] < away_data["defense_era"]:  # 수비력이 좋으면 (ERA가 낮으면)
+                home_advantage += 1
+            
+            # 최근 5경기 분석
+            home_recent = home_data["last_five"].count("W") if home_data["last_five"] else 0
+            away_recent = away_data["last_five"].count("W") if away_data["last_five"] else 0
+            
+            # 예측 결과
+            if home_advantage >= 3:
+                prediction = f"🏆 {home_team} 승리 예상"
+                confidence = "높음"
+            elif home_advantage <= 1:
+                prediction = f"🏆 {away_team} 승리 예상"
+                confidence = "높음"
+            else:
+                prediction = "⚖️ 접전 예상"
+                confidence = "보통"
+            
+            # 답변 생성
+            response = f"""📅 {game_date} {stadium}에서 열리는 {home_team} vs {away_team} 경기 예측
+
+🏟️ 경기 정보:
+• 날짜: {game_date}
+• 경기장: {stadium}
+• 홈팀: {home_team}
+• 원정팀: {away_team}
+
+📊 상대전적 분석:
+• {home_team}: {home_data['ranking']}위 (승률 {home_data['wra']:.3f})
+• {away_team}: {away_data['ranking']}위 (승률 {away_data['wra']:.3f})
+
+⚾ 공격력 비교:
+• {home_team} OPS: {home_data['offense_ops']:.3f}
+• {away_team} OPS: {away_data['offense_ops']:.3f}
+
+🥎 수비력 비교:
+• {home_team} ERA: {home_data['defense_era']:.2f}
+• {away_team} ERA: {away_data['defense_era']:.2f}
+
+📈 최근 5경기:
+• {home_team}: {home_data['last_five']} ({home_recent}승)
+• {away_team}: {away_data['last_five']} ({away_recent}승)
+
+🎯 예측 결과: {prediction} (신뢰도: {confidence})
+
+💡 팁: 실제 경기 결과는 예측과 다를 수 있으니 경기를 직접 관람해보세요!"""
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ 예측 답변 생성 오류: {e}")
+            return f"예측 답변 생성 중 오류가 발생했습니다: {str(e)}"
 
 def main():
     """테스트 함수"""
