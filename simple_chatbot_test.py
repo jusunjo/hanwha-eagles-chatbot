@@ -46,17 +46,8 @@ def test_chatbot():
         try:
             # 챗봇에 요청 보내기
             response = requests.post(
-                "http://localhost:8000/kakao",
-                json={
-                    "userRequest": {
-                        "user": {"id": "test_user"},
-                        "utterance": question,
-                        "callbackUrl": "http://localhost:8000/kakao"
-                    },
-                    "action": {
-                        "params": {"message": question}
-                    }
-                },
+                "http://localhost:8000/rag-test",
+                json={"message": question},
                 timeout=30
             )
             
@@ -66,12 +57,8 @@ def test_chatbot():
                 # 답변 추출
                 answer = "답변을 받지 못했습니다."
                 try:
-                    if "template" in data and "outputs" in data["template"]:
-                        outputs = data["template"]["outputs"]
-                        if outputs and len(outputs) > 0:
-                            first_output = outputs[0]
-                            if "simpleText" in first_output and "text" in first_output["simpleText"]:
-                                answer = first_output["simpleText"]["text"]
+                    if "answer" in data:
+                        answer = data["answer"]
                 except:
                     pass
                 
