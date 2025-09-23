@@ -311,6 +311,28 @@ class SchemaManager:
             for qtype_info in relevant_schema.get("question_types", []):
                 prompt += f"- {qtype_info['content']}\n"
             
+            # 다음 경기 관련 SQL 예시 추가
+            if any(keyword in question.lower() for keyword in ["다음", "다음 경기"]):
+                prompt += f"""
+
+다음 경기 관련 SQL 예시:
+- 특정 팀의 다음 경기 (오늘 날짜 기준):
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE (home_team_name = '한화' OR away_team_name = '한화')
+AND game_date >= CURRENT_DATE
+ORDER BY game_date, game_date_time
+LIMIT 1;
+
+- 다른 팀의 다음 경기:
+SELECT game_date, home_team_name, away_team_name, stadium, game_date_time, status_info
+FROM game_schedule 
+WHERE (home_team_name = '팀명' OR away_team_name = '팀명')
+AND game_date >= CURRENT_DATE
+ORDER BY game_date, game_date_time
+LIMIT 1;
+"""
+            
             prompt += f"\n질문: {question}\n\nSQL:"
             
             return prompt
