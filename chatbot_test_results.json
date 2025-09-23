@@ -1,0 +1,400 @@
+{
+  "metadata": {
+    "title": "KBO 챗봇 테스트 결과",
+    "description": "실제 챗봇에 질문을 보내고 받은 답변들",
+    "test_date": "2025-09-23T11:53:14.915337",
+    "total_questions": 20,
+    "successful_questions": 20,
+    "failed_questions": 0
+  },
+  "test_results": [
+    {
+      "question_id": 1,
+      "question": "오늘 경기 일정이 뭐야?",
+      "answer": "📅 2025년 09월 23일 KBO 경기 일정 (4경기)\n==================================================\n\n🏟️ 경기 1: KIA vs SSG\n   📍 경기장: 문학\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n🏟️ 경기 2: NC vs 롯데\n   📍 경기장: 울산\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n🏟️ 경기 3: 키움 vs KT\n   📍 경기장: 수원\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n🏟️ 경기 4: 두산 vs 삼성\n   📍 경기장: 대구\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n",
+      "status": "success",
+      "timestamp": "2025-09-23T11:51:55.596677",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "📅 2025년 09월 23일 KBO 경기 일정 (4경기)\n==================================================\n\n🏟️ 경기 1: KIA vs SSG\n   📍 경기장: 문학\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n🏟️ 경기 2: NC vs 롯데\n   📍 경기장: 울산\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n🏟️ 경기 3: 키움 vs KT\n   📍 경기장: 수원\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n🏟️ 경기 4: 두산 vs 삼성\n   📍 경기장: 대구\n   ⏰ 경기시간: 18:30\n   📋 상태: 예정\n\n"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 2,
+      "question": "어제 경기 결과 알려줘",
+      "answer": "📅 2025년 09월 22일 KBO 경기 결과 (1경기)\n==================================================\n\n🏟️ 경기 1:\n📅 2025년 09월 22일 문학에서 열린 두산 베어스 vs SSG 랜더스 경기 결과입니다.\n🏆 두산 베어스 9 - 2 SSG 랜더스로 승리했습니다.\n⚾ 경기 흐름: 두산 베어스은 고른 득점, SSG 랜더스은 8회에만 득점을 보였습니다.\n🎯 선발 투수: 두산 베어스 곽빈 (5이닝) vs SSG 랜더스 앤더슨 (4 ⅓이닝)\n💥 홈런: 강승호8호(2회1점 앤더슨)\n🔥 결승타: 강승호(2회 2사서 좌중월 홈런)\n⭐ 주요 순간: 결승타: 강승호(2회 2사서 좌중월 홈런), 홈런: 강승호8호(2회1점 앤더슨)\n\n📊 경기 결과 요약:\n   홈팀 승리: 0경기\n   원정팀 승리: 0경기\n",
+      "status": "success",
+      "timestamp": "2025-09-23T11:51:57.859420",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "📅 2025년 09월 22일 KBO 경기 결과 (1경기)\n==================================================\n\n🏟️ 경기 1:\n📅 2025년 09월 22일 문학에서 열린 두산 베어스 vs SSG 랜더스 경기 결과입니다.\n🏆 두산 베어스 9 - 2 SSG 랜더스로 승리했습니다.\n⚾ 경기 흐름: 두산 베어스은 고른 득점, SSG 랜더스은 8회에만 득점을 보였습니다.\n🎯 선발 투수: 두산 베어스 곽빈 (5이닝) vs SSG 랜더스 앤더슨 (4 ⅓이닝)\n💥 홈런: 강승호8호(2회1점 앤더슨)\n🔥 결승타: 강승호(2회 2사서 좌중월 홈런)\n⭐ 주요 순간: 결승타: 강승호(2회 2사서 좌중월 홈런), 홈런: 강승호8호(2회1점 앤더슨)\n\n📊 경기 결과 요약:\n   홈팀 승리: 0경기\n   원정팀 승리: 0경기\n"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 3,
+      "question": "내일 경기 언제야?",
+      "answer": "📅 2025년 09월 24일 문학에서 열린 한화 vs SSG 경기\n📋 경기가 예정되어 있습니다.\n🏟️ 경기장: 문학\n⚾ 한화 vs SSG의 경기를 기대해주세요!",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:00.446295",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "📅 2025년 09월 24일 문학에서 열린 한화 vs SSG 경기\n📋 경기가 예정되어 있습니다.\n🏟️ 경기장: 문학\n⚾ 한화 vs SSG의 경기를 기대해주세요!"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 4,
+      "question": "한화 이글스 경기 언제야?",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:05.570220",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 5,
+      "question": "지금 경기하고 있어?",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:10.686110",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 6,
+      "question": "노시환 선수 기록 어때?",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:15.827934",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 7,
+      "question": "이번 시즌 홈런왕이 누구야?",
+      "answer": "이번 시즌 홈런왕은 디아즈입니다. \n\n그의 홈런 수는 48개입니다.",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:20.670536",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "이번 시즌 홈런왕은 디아즈입니다. \n\n그의 홈런 수는 48개입니다."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 8,
+      "question": "한화 이글스 타자들 성적은?",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:25.782636",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 9,
+      "question": "투수 방어율 순위 알려줘",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:30.908393",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 10,
+      "question": "최근 활약하는 신인 선수 있어?",
+      "answer": "📅 2025년 09월 22일 문학에서 열린 두산 베어스 vs SSG 랜더스 경기 결과입니다.\n🏆 두산 베어스 9 - 2 SSG 랜더스로 승리했습니다.\n⚾ 경기 흐름: 두산 베어스은 고른 득점, SSG 랜더스은 8회에만 득점을 보였습니다.\n🎯 선발 투수: 두산 베어스 곽빈 (5이닝) vs SSG 랜더스 앤더슨 (4 ⅓이닝)\n💥 홈런: 강승호8호(2회1점 앤더슨)\n🔥 결승타: 강승호(2회 2사서 좌중월 홈런)\n⭐ 주요 순간: 결승타: 강승호(2회 2사서 좌중월 홈런), 홈런: 강승호8호(2회1점 앤더슨)",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:33.463681",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "📅 2025년 09월 22일 문학에서 열린 두산 베어스 vs SSG 랜더스 경기 결과입니다.\n🏆 두산 베어스 9 - 2 SSG 랜더스로 승리했습니다.\n⚾ 경기 흐름: 두산 베어스은 고른 득점, SSG 랜더스은 8회에만 득점을 보였습니다.\n🎯 선발 투수: 두산 베어스 곽빈 (5이닝) vs SSG 랜더스 앤더슨 (4 ⅓이닝)\n💥 홈런: 강승호8호(2회1점 앤더슨)\n🔥 결승타: 강승호(2회 2사서 좌중월 홈런)\n⭐ 주요 순간: 결승타: 강승호(2회 2사서 좌중월 홈런), 홈런: 강승호8호(2회1점 앤더슨)"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 11,
+      "question": "한화 이글스 순위가 몇 위야?",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:38.576196",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 12,
+      "question": "KBO 전체 순위표 보여줘",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:43.696301",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 13,
+      "question": "한화 이글스 감독이 누구야?",
+      "answer": "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:47.449332",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 14,
+      "question": "한화 이글스 홈구장이 어디야?",
+      "answer": "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:51.633224",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 15,
+      "question": "이번 시즌 최다승 투수는?",
+      "answer": "📅 2025년 09월 30일 대구에서 열린 KIA vs 삼성 경기\n📋 경기가 예정되어 있습니다.\n🏟️ 경기장: 대구\n⚾ KIA vs 삼성의 경기를 기대해주세요!",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:54.353487",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "📅 2025년 09월 30일 대구에서 열린 KIA vs 삼성 경기\n📋 경기가 예정되어 있습니다.\n🏟️ 경기장: 대구\n⚾ KIA vs 삼성의 경기를 기대해주세요!"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 16,
+      "question": "타율 1위가 누구야?",
+      "answer": "SQL 생성에 실패했습니다.",
+      "status": "success",
+      "timestamp": "2025-09-23T11:52:58.417087",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "SQL 생성에 실패했습니다."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 17,
+      "question": "한화 이글스 최근 10경기 성적은?",
+      "answer": "해당 조건에 맞는 경기 정보를 찾을 수 없습니다.",
+      "status": "success",
+      "timestamp": "2025-09-23T11:53:01.277370",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "해당 조건에 맞는 경기 정보를 찾을 수 없습니다."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 18,
+      "question": "KBO 규칙이 뭐야?",
+      "answer": "SQL 생성에 실패했습니다.",
+      "status": "success",
+      "timestamp": "2025-09-23T11:53:05.242916",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "SQL 생성에 실패했습니다."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 19,
+      "question": "야구 용어 설명해줘",
+      "answer": "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊",
+      "status": "success",
+      "timestamp": "2025-09-23T11:53:09.795065",
+      "raw_response": {
+        "version": "2.0",
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "해당 질문에 대한 데이터를 찾을 수 없습니다. 다른 질문을 시도해보세요! 😊"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "question_id": 20,
+      "question": "KBO 챗봇이 뭘 할 수 있어?",
+      "answer": "답변을 입력중입니다 . . .",
+      "status": "success",
+      "timestamp": "2025-09-23T11:53:14.915068",
+      "raw_response": {
+        "version": "2.0",
+        "useCallback": true,
+        "template": {
+          "outputs": [
+            {
+              "simpleText": {
+                "text": "답변을 입력중입니다 . . ."
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
