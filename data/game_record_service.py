@@ -37,6 +37,10 @@ class GameRecordService:
                 if response.status_code == 200:
                     data = response.json()
                     logger.info(f"경기 기록 데이터 수신 성공: {game_id}")
+                    logger.info(f"API 응답 데이터 구조: {type(data)}")
+                    logger.info(f"API 응답 데이터 키: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                    if isinstance(data, dict) and 'code' in data:
+                        logger.info(f"API 응답 코드: {data.get('code')}")
                     return data
                 else:
                     logger.error(f"경기 기록 API 호출 실패: {response.status_code} - {response.text}")
@@ -57,10 +61,25 @@ class GameRecordService:
             분석된 경기 요약 정보
         """
         try:
-            if not record_data or record_data.get("code") != 200:
+            if not record_data:
+                return {"error": "경기 기록 데이터가 없습니다."}
+            
+            if not isinstance(record_data, dict):
+                return {"error": "경기 기록 데이터 형식이 올바르지 않습니다."}
+            
+            if record_data.get("code") != 200:
                 return {"error": "유효하지 않은 경기 기록 데이터입니다."}
             
-            result = record_data.get("result", {}).get("recordData", {})
+            result = record_data.get("result", {})
+            if not result:
+                return {"error": "경기 결과 데이터가 없습니다."}
+            
+            record_data_content = result.get("recordData")
+            if not record_data_content:
+                logger.info(f"경기 기록 데이터가 null입니다. (경기 ID: {record_data.get('game_id', 'unknown')})")
+                return {"error": "경기 기록 데이터가 없습니다. (경기가 예정이거나 데이터가 준비되지 않음)"}
+            
+            result = record_data_content
             
             # 기본 경기 정보
             game_info = result.get("gameInfo", {})

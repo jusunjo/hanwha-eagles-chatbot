@@ -848,21 +848,48 @@ class RAGTextToSQL:
                 print(f"🔍 경기 {i+1}/{len(daily_games)} 분석 중: {game_id}")
                 
                 try:
-                    # 경기 기록 데이터 가져오기
-                    record_data = await game_record_service.get_game_record(game_id)
+                    # 경기 상태 확인 (game_data에서 statusCode 추출)
+                    game_data = game_info.get('game_data', {})
+                    status_code = game_data.get('statusCode', '0') if isinstance(game_data, dict) else '0'
+                    print(f"🔍 경기 {i+1} 상태 코드: {status_code}")
                     
-                    if not record_data:
-                        # API 데이터가 없는 경우 기본 정보만 사용
+                    # 경기 기록 데이터 가져오기 (모든 경기에 대해 API 호출하여 실제 상태 확인)
+                    record_data = await game_record_service.get_game_record(game_id)
+                    print(f"🔍 경기 {i+1} API 데이터 수신: {record_data is not None}")
+                    
+                    # API에서 받은 실제 상태 확인
+                    actual_status = "예정"  # 기본값
+                    if record_data and isinstance(record_data, dict):
+                        result = record_data.get("result", {})
+                        if result and result.get("recordData"):
+                            # recordData가 있으면 경기가 진행되었거나 종료됨
+                            actual_status = "진행완료"
+                        else:
+                            # recordData가 null이면 예정
+                            actual_status = "예정"
+                    
+                    print(f"🔍 경기 {i+1} 실제 상태: {actual_status}")
+                    
+                    if record_data and actual_status == "진행완료":
+                        # 경기 데이터 분석 (실제로 진행된 경기만)
+                        analysis = game_record_service.analyze_game_record(record_data)
+                        
+                        # 분석 결과 확인
+                        if "error" in analysis:
+                            print(f"⚠️ 경기 {game_id} 분석 오류: {analysis['error']}")
+                            # 오류가 있어도 기본 정보라도 제공
+                            summary = self._generate_basic_game_summary(game_info)
+                            game_summaries.append(summary)
+                            continue
+                        
+                        # 자연어 요약 생성
+                        summary = game_record_service.generate_game_summary(analysis)
+                        game_summaries.append(summary)
+                    else:
+                        # API 데이터가 없거나 경기가 예정인 경우 기본 정보 제공
+                        print(f"🔍 경기 {i+1} API 데이터 없음 또는 예정 - 기본 정보로 요약 생성")
                         summary = self._generate_basic_game_summary(game_info)
                         game_summaries.append(summary)
-                        continue
-                    
-                    # 경기 데이터 분석
-                    analysis = game_record_service.analyze_game_record(record_data)
-                    
-                    # 자연어 요약 생성
-                    summary = game_record_service.generate_game_summary(analysis)
-                    game_summaries.append(summary)
                     
                 except Exception as e:
                     print(f"❌ 경기 {game_id} 분석 오류: {e}")
@@ -892,7 +919,11 @@ class RAGTextToSQL:
             home_score = game_info.get('home_team_score', 0)
             away_score = game_info.get('away_team_score', 0)
             winner = game_info.get('winner', '')
-            status_info = game_info.get('status_info', '')
+            game_time = game_info.get('time', '')
+            
+            # game_data에서 statusCode 추출
+            game_data = game_info.get('game_data', {})
+            status_code = game_data.get('statusCode', '0') if isinstance(game_data, dict) else '0'
             
             # 날짜 포맷팅
             if game_date and len(game_date) >= 10:
@@ -903,16 +934,38 @@ class RAGTextToSQL:
             # 기본 요약
             summary = f"📅 {formatted_date} {stadium}에서 열린 {away_team} vs {home_team} 경기\n"
             
-            # 승부 결과
-            if winner == 'HOME':
-                summary += f"🏆 {home_team} {home_score} - {away_score} {away_team}로 승리"
-            elif winner == 'AWAY':
-                summary += f"🏆 {away_team} {away_score} - {home_score} {home_team}로 승리"
+            # 경기 상태에 따른 처리 (statusCode 기반)
+            if status_code == '0':
+                # 경기 예정인 경우
+                if game_time:
+                    summary += f"⏰ 경기 시간: {game_time}\n"
+                summary += f"📋 경기가 예정되어 있습니다.\n"
+                summary += f"🏟️ 경기장: {stadium}\n"
+                summary += f"⚾ {away_team} vs {home_team}의 경기를 기대해주세요!"
+                
+            elif status_code == '2':
+                # 경기 진행 중인 경우
+                summary += f"🔥 현재 경기가 진행 중입니다!\n"
+                if home_score > 0 or away_score > 0:
+                    summary += f"📊 현재 점수: {away_team} {away_score} - {home_score} {home_team}\n"
+                summary += f"⚾ 실시간 경기 상황을 확인해보세요!"
+                
+            elif status_code == '4':
+                # 경기 종료된 경우
+                if winner == 'HOME':
+                    summary += f"🏆 {home_team} {home_score} - {away_score} {away_team}로 승리"
+                elif winner == 'AWAY':
+                    summary += f"🏆 {away_team} {away_score} - {home_score} {home_team}로 승리"
+                else:
+                    summary += f"🏆 {away_team} {away_score} - {home_score} {home_team}"
+                
+                summary += f"\n⚾ 경기 상태: 종료"
+                    
             else:
-                summary += f"🏆 {away_team} {away_score} - {home_score} {home_team}"
-            
-            if status_info:
-                summary += f"\n⚾ 경기 상황: {status_info}"
+                # 기타 상태
+                if home_score > 0 or away_score > 0:
+                    summary += f"📊 점수: {away_team} {away_score} - {home_score} {home_team}\n"
+                summary += f"📋 경기 정보를 확인해주세요. (상태코드: {status_code})"
             
             return summary
             
@@ -973,17 +1026,44 @@ class RAGTextToSQL:
             
             print(f"🔍 찾은 게임 ID: {game_id}")
             
-            # 경기 기록 데이터 가져오기
+            # 경기 상태 확인 (game_data에서 statusCode 추출)
+            game_data = game_info.get('game_data', {})
+            status_code = game_data.get('statusCode', '0') if isinstance(game_data, dict) else '0'
+            print(f"🔍 경기 상태 코드: {status_code}")
+            
+            # 경기 기록 데이터 가져오기 (모든 경기에 대해 API 호출하여 실제 상태 확인)
             record_data = await game_record_service.get_game_record(game_id)
+            print(f"🔍 API 데이터 수신: {record_data is not None}")
             
-            if not record_data:
-                return f"경기 기록 데이터를 가져올 수 없습니다."
+            # API에서 받은 실제 상태 확인
+            actual_status = "예정"  # 기본값
+            if record_data and isinstance(record_data, dict):
+                result = record_data.get("result", {})
+                if result and result.get("recordData"):
+                    # recordData가 있으면 경기가 진행되었거나 종료됨
+                    actual_status = "진행완료"
+                else:
+                    # recordData가 null이면 예정
+                    actual_status = "예정"
             
-            # 경기 데이터 분석
-            analysis = game_record_service.analyze_game_record(record_data)
+            print(f"🔍 실제 경기 상태: {actual_status}")
             
-            # 자연어 요약 생성
-            summary = game_record_service.generate_game_summary(analysis)
+            if record_data and actual_status == "진행완료":
+                # 경기 데이터 분석 (실제로 진행된 경기만)
+                analysis = game_record_service.analyze_game_record(record_data)
+                
+                # 분석 결과 확인
+                if "error" in analysis:
+                    print(f"⚠️ 경기 분석 오류: {analysis['error']}")
+                    # 오류가 있어도 기본 정보라도 제공
+                    summary = self._generate_basic_game_summary(game_info)
+                else:
+                    # 자연어 요약 생성
+                    summary = game_record_service.generate_game_summary(analysis)
+            else:
+                # API 데이터가 없거나 경기가 예정인 경우 기본 정보 제공
+                print(f"🔍 API 데이터 없음 또는 예정 - 기본 정보로 요약 생성")
+                summary = self._generate_basic_game_summary(game_info)
             
             print(f"✅ 경기 분석 완료")
             return summary
